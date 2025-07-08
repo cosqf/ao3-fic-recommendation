@@ -1,42 +1,41 @@
-from wrapped import giveUserInfo
-from web import settingUpBrowser, logIn, gettingHistory
-from userData import processWorks
-from imports import pd,getpass
+from wrapped import giveUserInfo, askForDate, askForFandom, askForShip, askForExplicit
+from web import settingUpBrowser, logIn, gettingHistory, checkBookmarks
+import pandas as pd
+import getpass
+from playwright.sync_api import sync_playwright
+from playwright_stealth import Stealth
+import os
 
-login = False
-read = False
+login = True
 
-username = input ("User: ")
+dataFrame = pd.DataFrame(columns= ["fic_id", "ships", "rating", "tags", "fandom", "word_count", "last_visited", "bookmarked"])
+
+os.makedirs("data", exist_ok=True)
+
+username = input ("User: ").lower().strip()
 if login:
-    driver = settingUpBrowser()
-    password = getpass.getpass('Password:')
+    with Stealth().use_sync(sync_playwright()) as pw:
+        page = settingUpBrowser(pw)
+        password = getpass.getpass('Password:')
 
-    driver = logIn (username, password, driver)
-    pagesTotal = gettingHistory (driver, username)
-
-    driver.quit()
+        page = logIn (username, password, page)
+        dataFrame = gettingHistory (page, username, dataFrame)
+        checkBookmarks (username, dataFrame, page)
+        page.close()
+        
+        dataFrame.to_json ("data/" + username + "_history_data.json")
 else:
-    pagesTotal = 41 # test number
+    dataFrame = pd.read_json ("data/" + username + "_history_data.json")
 
+while True:
+    dateFilter = askForDate()
+    fandomFilter = askForFandom(dataFrame)
+    shipFilter = askForShip (dataFrame)
+    explicitFilter = askForExplicit ()
 
-dataFrame = pd.DataFrame(columns= ["fic_id", "ships", "rating", "tags", "fandom", "word_count"])
-
-
-if read:
-    for page in range(1, pagesTotal+1):
-        with open ("data/" + username + "_page_"+ str (page) + ".html", "r", encoding="utf-8") as f:
-            try:
-                print ("beginning to read the page ", page)
-                dataFrame = processWorks(f, dataFrame)
-
-            except Exception as e:
-                print(f"Error: {e}")
-                pagesTotal = page
-                break
-
-    dataFrame.to_csv ("data/" + username + "_history_data.csv")
-else:
-    dataFrame = pd.read_csv ("data/" + username + "_history_data.csv")
-
-
-giveUserInfo (dataFrame)
+    giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter)
+    filterAgain = ""
+    while filterAgain not in ["Y", "N"]:
+        filterAgain = input ("Choose different filters? (Y/N): ").strip().upper()
+    if filterAgain == "N":
+        break

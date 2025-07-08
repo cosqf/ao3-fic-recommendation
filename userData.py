@@ -1,32 +1,31 @@
-from imports import BeautifulSoup, pd
+import pandas as pd 
 
-def processWorks (html, dataFrame):
-    content = BeautifulSoup(html, "html.parser")
-    work_list = content.find_all ("li", {"role" : "article"})
-    rows = []
-    for current_work in work_list:
-        if "deleted" in current_work.get("class", []): continue
-        
-        id        = int (current_work.find ("h4", {"class" : "heading"}).find ("a").get ("href")[7:])
+def processWork(work, rows):
+    if "deleted" in work.get_attribute("class"): 
+        return
+    
+    id = int(work.locator("h4.heading a[href^='/works/']").get_attribute("href")[7:])
 
-        all_ships = current_work.find_all ("li", class_= "relationships")
-        ships     = [ship.find ("a", class_ = "tag").text.strip() for ship in all_ships]
+    all_ships = work.locator("li.relationships").all()
+    ships = [ship.locator("a.tag").inner_text().strip() for ship in all_ships]
 
-        rating    = current_work.find("a", class_="help symbol question modal modal-attached").find("span", class_="text").text.strip()
+    rating = work.locator("ul.required-tags li").nth(0).inner_text().strip()
 
-        all_tags  = current_work.find_all("li", class_="freeforms")
-        tags      = [tag.find("a", class_="tag").text.strip() for tag in all_tags]
+    all_tags = work.locator("li.freeforms").all()
+    tags = [tag.locator("a.tag").inner_text().strip() for tag in all_tags]
 
-        fandoms   = [f.text.strip() for f in current_work.find("h5", class_="fandoms heading").find_all("a", class_="tag")]
-        
-        # rounds word count to the nearest 1000 multiple 
-        words_tag = current_work.find("dd", attrs={"class": "words"})
-        words = int(words_tag.text.replace(",", "")) if words_tag else 0
-        words = round(words / 1000) * 1000 if (words > 1000) else 1000
+    fandoms = [f.inner_text().strip() for f in work.locator("h5.fandoms.heading a.tag").all()]
+    fandoms.sort()
+    
+    # rounds word count to the nearest 1000 multiple 
+    words_tag = work.locator("dd.words")
+    words_text = words_tag.inner_text().replace(",", "") if words_tag.count() > 0 else "0"
+    words = int(words_text)
+    words = round(words / 1000) * 1000 if (words > 1000) else 1000
 
-        rows.append([id, ships, rating, tags, fandoms, words])
-
-    new_rows = pd.DataFrame(rows, columns = ["fic_id", "ships", "rating", "tags", "fandom", "word_count"])
-    dataFrame = pd.concat ([dataFrame, new_rows], ignore_index = True)
-    return dataFrame
-        
+    last_visited = work.locator ("div.user.module.group h4.viewed.heading").inner_text().split(" ")[2:5]
+    last_visited = ' '.join (last_visited)
+    parsed_date = pd.to_datetime(last_visited, format="%d %b %Y")
+    
+    bookmark = False
+    rows.append([id, ships, rating, tags, fandoms, words, parsed_date, bookmark])
