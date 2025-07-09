@@ -1,3 +1,3 @@
 # ao3-fic-recomendation
-An ao3 scrapper that logs in, reads your history, and recommends a fanfic.
-Currently unfinished and unoperational. 
+An ao3 scrapper that reads your history, shows you your stats and recommends a fanfic.
+Currently only showing stats.

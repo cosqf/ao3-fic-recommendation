@@ -11,6 +11,8 @@ def processWork(work, rows):
 
     rating = work.locator("ul.required-tags li").nth(0).inner_text().strip()
 
+    orientations = [o.inner_text().strip() for o in work.locator("ul.required-tags li").nth(2).all()]
+
     all_tags = work.locator("li.freeforms").all()
     tags = [tag.locator("a.tag").inner_text().strip() for tag in all_tags]
 
@@ -28,4 +30,4 @@ def processWork(work, rows):
     parsed_date = pd.to_datetime(last_visited, format="%d %b %Y")
     
     bookmark = False
-    rows.append([id, ships, rating, tags, fandoms, words, parsed_date, bookmark])
+    rows.append([id, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark])

@@ -1,4 +1,4 @@
-from wrapped import giveUserInfo, askForDate, askForFandom, askForShip, askForExplicit
+from wrapped import giveUserInfo, askForDate, askForFandom, askForShip, askForExplicit, askForOrientation
 from web import settingUpBrowser, logIn, gettingHistory, checkBookmarks
 import pandas as pd
 import getpass
@@ -6,9 +6,9 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 import os
 
-login = True
+login = False
 
-dataFrame = pd.DataFrame(columns= ["fic_id", "ships", "rating", "tags", "fandom", "word_count", "last_visited", "bookmarked"])
+dataFrame = pd.DataFrame(columns= ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
 
 os.makedirs("data", exist_ok=True)
 
@@ -23,17 +23,26 @@ if login:
         checkBookmarks (username, dataFrame, page)
         page.close()
         
-        dataFrame.to_json ("data/" + username + "_history_data.json")
+        dataFrame.to_json ("data/" + username + "_history_data.json",  date_format='iso')
 else:
     dataFrame = pd.read_json ("data/" + username + "_history_data.json")
+    dataFrame['last_visited'] = pd.to_datetime(dataFrame['last_visited'], errors='coerce')
 
 while True:
-    dateFilter = askForDate()
-    fandomFilter = askForFandom(dataFrame)
-    shipFilter = askForShip (dataFrame)
-    explicitFilter = askForExplicit ()
+    applyFilter = ""
+    while applyFilter not in ["Y", "N"]:
+        applyFilter = input ("Apply filters? (Y/N): ").strip().upper()
 
-    giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter)
+    if applyFilter == "Y":
+        dateFilter = askForDate()
+        fandomFilter = askForFandom(dataFrame)
+        shipFilter = askForShip (dataFrame)
+        explicitFilter = askForExplicit ()
+        orientationFilter = askForOrientation()
+        giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
+    else:
+        giveUserInfo (dataFrame)
+
     filterAgain = ""
     while filterAgain not in ["Y", "N"]:
         filterAgain = input ("Choose different filters? (Y/N): ").strip().upper()

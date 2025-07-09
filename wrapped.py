@@ -1,4 +1,3 @@
-import ast
 import pandas as pd 
 from collections import Counter
 from utilFuncs import formatTuplesInList
@@ -7,8 +6,12 @@ from datetime import date
 import re
 
 
-def giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter):
-    print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}\n")
+def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
+    print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
+
+    dataFrame = apply_filters (df, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
+
+    print (f"{len(dataFrame)} total works\n")
 
     tag_counts = Counter(tag.strip() for tags in dataFrame["tags"] for tag in tags)
     ship_counts = Counter(ship.strip() for ships in dataFrame["ships"] for ship in ships)
@@ -27,11 +30,20 @@ def giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilte
 
     fandomCounts = pd.Series(formattedFandoms).value_counts()
     fandomPercentages = round((fandomCounts / len(dataFrame)) * 100)
-    formattedPercentages = fandomPercentages.apply (lambda x: f"{x}%")
+    f_formattedPercentages = fandomPercentages.apply (lambda x: f"{round(x)}%")
 
-    for fandom, percentage in formattedPercentages.head(10).items():
+    for fandom, percentage in f_formattedPercentages.head(10).items():
         print(f" {fandom}: {percentage}")
 
+    print ("\nThe orientation percentage is:")
+    formattedOrientations = dataFrame["orientations"].apply(lambda x: ", ".join(x))
+
+    orientationCounts = pd.Series(formattedOrientations).value_counts()
+    orientationPercentages = round((orientationCounts / len(dataFrame)) * 100)
+    o_formattedPercentages = orientationPercentages.apply (lambda x: f"{round(x)}%")
+
+    for orientation, percentage in o_formattedPercentages.head(10).items():
+        print(f" {orientation}: {percentage}")
 
     print ("\nThe most common ship-tag combos are:")
     tag_ship_pairs = []
@@ -46,6 +58,37 @@ def giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilte
 
     print(tag_ship_counts.head(10))
 
+
+
+def apply_filters(df: pd.DataFrame, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
+    if df.empty:
+        return pd.DataFrame()
+
+    f_df = df.copy() 
+
+    if shipFilter is not None:
+        f_df = f_df[shipFilter]
+
+    if fandomFilter is not None:
+        f_df = f_df[fandomFilter]
+
+    if orientationFilter is not None:
+       mask = f_df['orientations'].apply(lambda x: orientationFilter in x)
+       f_df = f_df[mask]
+
+    if dateFilter is not None:
+        mask = f_df['last_visited'].apply(lambda x: x.date() >= dateFilter) 
+        f_df = f_df[mask]
+
+    if explicitFilter is not None:
+        if explicitFilter == 'safe':
+            mask = f_df['rating'].apply(lambda x: x != 'Explicit') 
+            f_df = f_df[mask]
+        elif explicitFilter == 'explicit': 
+            mask = f_df['rating'].apply(lambda x: x == 'Explicit')
+            f_df = f_df[mask]
+
+    return f_df
 
 
 def askForDate():
@@ -160,10 +203,7 @@ def askForShip (df : pd.DataFrame):
 
     mask = df['ships'].apply(lambda x: matches_characters(x, characters))
 
-    filtered_df = df[mask]
-    print(filtered_df) 
-
-    return filtered_df if not filtered_df.empty else None
+    return mask
 
 
 
@@ -190,7 +230,7 @@ def askForExplicit ():
         print ("Filter related to explicit content? (Y/N)")
         filtExplicit = input().strip().upper()
     if filtExplicit == 'N':
-        return "none"
+        return None
     
     onlyExplicit = ""
     while onlyExplicit not in ['1', '2']:
@@ -199,3 +239,35 @@ def askForExplicit ():
     if onlyExplicit == '1':
         return "explicit"
     return "safe"
+
+
+def askForOrientation ():
+    filtOrientation = ""
+    while filtOrientation not in ['Y', 'N']:
+        print ("Filter related to the orientation of the relationships? (Y/N)")
+        filtOrientation = input().strip().upper()
+    if filtOrientation == 'N':
+        return None
+    
+    options = {
+        '1': "F/F: female/female relationships",
+        '2': "F/M: female/male relationships",
+        '3': "Gen: no romantic or sexual relationships, or relationships which are not the main focus of the work",
+        '4': "M/M: male/male relationships",
+        '5': "Multi: more than one kind of relationship, or a relationship with multiple partners",
+        '6': "Other"
+    }
+    
+    options_display = "\nConsider only: \n"
+    for key, value in options.items():
+        options_display += f"{value} ({key})\n"
+
+    while True:
+        print(options_display)
+        
+        user_input = input("Enter your choice (1-6): ").strip()
+        if user_input in options:
+            return options[user_input].split(': ')[0] 
+        else:
+            print(f"Invalid input: '{user_input}'. Please enter a number between 1 and 6.")
+

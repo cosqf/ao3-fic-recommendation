@@ -78,7 +78,7 @@ def gettingHistory (page, username, dataFrame):
             work = work_list.nth (i)
             processWork (work, rows)
 
-        new_rows = pd.DataFrame(rows, columns = ["fic_id", "ships", "rating", "tags", "fandom", "word_count", "last_visited", "bookmarked"])
+        new_rows = pd.DataFrame(rows, columns = ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
         dataFrame = pd.concat ([dataFrame, new_rows], ignore_index = True)
 
         print(f"Page {p} read")
