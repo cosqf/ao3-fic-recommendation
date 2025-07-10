@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 import os
 
-login = False
+login = True
 
 dataFrame = pd.DataFrame(columns= ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
 
