@@ -1,8 +1,6 @@
 import time
-from playwright.sync_api import Playwright, sync_playwright, TimeoutError
-from userData import processWork
+from playwright.sync_api import Playwright
 import pandas as pd
-import random
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -95,6 +93,42 @@ def gettingHistory (page, username, dataFrame):
     return dataFrame
 
 
+def processWork(work, rows):
+    if "deleted" in work.get_attribute("class"): 
+        return
+    
+    work_link_locator = work.locator("h4.heading a[href^='/works/']")
+    work_link_locator.wait_for(state="attached", timeout=15000)
+
+    id = int (work_link_locator.get_attribute("href", timeout=5000)[7:])
+
+    all_ships = work.locator("li.relationships").all()
+    ships = [ship.locator("a.tag").inner_text().strip() for ship in all_ships]
+
+    rating = work.locator("ul.required-tags li").nth(0).inner_text().strip()
+
+    orientations = [o.inner_text().strip() for o in work.locator("ul.required-tags li").nth(2).all()]
+
+    all_tags = work.locator("li.freeforms").all()
+    tags = [tag.locator("a.tag").inner_text().strip() for tag in all_tags]
+
+    fandoms = [f.inner_text().strip() for f in work.locator("h5.fandoms.heading a.tag").all()]
+    fandoms.sort()
+    
+    # rounds word count to the nearest 1000 multiple 
+    words_tag = work.locator("dd.words")
+    words_text = words_tag.inner_text().replace(",", "") if words_tag.count() > 0 else "0"
+    words = int(words_text)
+    words = round(words / 1000) * 1000 if (words > 1000) else 1000
+
+    last_visited = work.locator ("div.user.module.group h4.viewed.heading").inner_text().split(" ")[2:5]
+    last_visited = ' '.join (last_visited)
+    parsed_date = pd.to_datetime(last_visited, format="%d %b %Y")
+    
+    bookmark = False
+    rows.append([id, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark])
+
+
 def checkBookmarks (username, dataframe : pd.DataFrame, page):
     print ("checking bookmarks")
     base_url = f"https://archiveofourown.org/users/{username}/bookmarks?page="
@@ -131,79 +165,3 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
 
         print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
-        
-
-
-
-
-def checkKudo (username, work, pw): # too heavy, not in use
-    workSubUrl = work.locator("h4.heading a[href^='/works/']").get_attribute("href")
-    if workSubUrl is None:
-        print ("error reading page")
-        return False
-    
-    url = f"https://archiveofourown.org{workSubUrl}/kudos?page="
-    pageNumber = 1
-
-    page = settingUpBrowser(pw)
-    while (True):
-        current_url = url + str(pageNumber)
-        for attempt in range (3):
-            try:
-                page.goto(current_url, timeout=5000)
-                
-                # check for "Retry Later"
-                page_content = page.content()
-                if "retry later" in page_content.lower() or "too many requests" in page_content.lower():
-                    if attempt <2:
-                        print(f"detected 'Retry Later' message on {current_url}. Waiting longer and retrying...")
-                        time.sleep(random.uniform(120, 180)) # a longer, forced wait
-                        continue
-                    else:
-                        print(f"Max retries reached due to 'Retry Later' error: {current_url}. Giving up on this page.")
-                        page.close()
-                        return False
-
-                page.wait_for_selector("p.kudos", timeout=5000) #ensuring the page loaded
-                break
-
-            except Exception as e:
-                print(f"An unexpected error occurred on attempt {attempt + 1}/3 for page {current_url}: {e}. Retrying...")
-                if attempt < 2:
-                    time.sleep(2) 
-                else:
-                    print(f"Max retries reached due to error {e}, for page: {current_url}. Giving up on this page.")
-                    page.close()
-                    return False
-        usernamesRaw = page.locator("p.kudos").text_content()
-        if (usernamesRaw):
-            usernames = [name.strip() for name in usernamesRaw.split(",")]
-        else:
-            print ("error reading page")
-            return False
-        if username in usernames: #found user, kudo!
-            page.close()
-            print (f"{workSubUrl} was kudoed")
-            return True
-        
-        # check if has seen all pages 
-        numberUsersHeader = page.locator("#main.kudos-index h2.heading").text_content()
-        if numberUsersHeader:
-            if len(numberUsersHeader.split("-")) == 1: #only one page of kudos to check
-                page.close()
-                print (f"{workSubUrl} wasn't kudoed")
-                return False
-            numberKudos = numberUsersHeader.split("-")[1].split(" ")
-        else:
-            print ("error reading page")
-            return False
-        
-        if (int (numberKudos[1].replace(",", "")) >= int (numberKudos[3].replace(",", ""))): # reached the end, didnt find the user
-            page.close()
-            print (f"{workSubUrl} wasn't kudoed")
-            return False
-        
-        pageNumber += 1
-
-                
-        
