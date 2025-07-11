@@ -1,10 +1,12 @@
 import pandas as pd 
 from collections import Counter
-from utilFuncs import formatTuplesInList
 from itertools import product
 from datetime import date
 import re
 
+def formatTuplesInList (arr):
+    formatted_list = [(f"{tag.strip()}: {count}") for tag, count in arr]
+    return "\n ".join(formatted_list)
 
 def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
     print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
@@ -16,7 +18,7 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     tag_counts = Counter(tag.strip() for tags in dataFrame["tags"] for tag in tags)
     ship_counts = Counter(ship.strip() for ships in dataFrame["ships"] for ship in ships)
 
-    print ("Top 10 most common tags:\n",  formatTuplesInList (tag_counts.most_common(10)))
+    print ("Top 10 most common tags:\n", formatTuplesInList (tag_counts.most_common(10)))
 
     print ("\nTop 10 most common ships:\n", formatTuplesInList (ship_counts.most_common(10)))
 
@@ -270,4 +272,3 @@ def askForOrientation ():
             return options[user_input].split(': ')[0] 
         else:
             print(f"Invalid input: '{user_input}'. Please enter a number between 1 and 6.")
-

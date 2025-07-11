@@ -146,7 +146,6 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
                 continue
             id = int(work.locator("h4.heading a[href^='/works/']").get_attribute("href")[7:])
             dataframe.loc[dataframe["fic_id"] == id, "bookmarked"] = True
-            
 
         # check if has seen all pages 
         numberUsersHeader = page.locator("#main > h2").text_content()

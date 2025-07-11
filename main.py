@@ -23,6 +23,7 @@ if login:
         page = logIn (username, password, page)
         dataFrame = gettingHistory (page, username, dataFrame)
         checkBookmarks (username, dataFrame, page)
+        dataFrame['bookmarked'] = dataFrame['bookmarked'].astype(bool)
         page.close()
         
         dataFrame.to_json ("data/" + username + "_history_data.json",  date_format='iso')

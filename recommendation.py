@@ -79,7 +79,7 @@ def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, 
     return user_profile_vector
 
 
-def create_user_profile_from_history(history_df: pd.DataFrame, bookmark_boost: float = 3.0):
+def create_user_profile_from_history(history_df: pd.DataFrame):
     ohe_rating_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True)
     ohe_rating_encoder.fit(history_df[['rating']])
 
