@@ -1,6 +1,7 @@
 import time
 from playwright.sync_api import Playwright
 import pandas as pd
+import re
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -104,6 +105,7 @@ def processWork(work, rows):
 
     all_ships = work.locator("li.relationships").all()
     ships = [ship.locator("a.tag").inner_text().strip() for ship in all_ships]
+    ships = [re.sub(r"\([^)]*\)", "", s).strip() for s in ships]
 
     rating = work.locator("ul.required-tags li").nth(0).inner_text().strip()
 
@@ -111,6 +113,7 @@ def processWork(work, rows):
 
     all_tags = work.locator("li.freeforms").all()
     tags = [tag.locator("a.tag").inner_text().strip() for tag in all_tags]
+    tags = [re.sub(r"\([^)]*\)", "", t).strip() for t in tags]
 
     fandoms = [f.inner_text().strip() for f in work.locator("h5.fandoms.heading a.tag").all()]
     fandoms.sort()
@@ -164,3 +167,7 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
 
         print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
+
+
+def scrap_unread_fics (tag_ship_counts, ship_tag):
+    print ()

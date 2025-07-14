@@ -4,6 +4,29 @@ from itertools import product
 from datetime import date
 import re
 
+def giveWrapped (dataFrame):
+    while True:
+        applyFilter = ""
+        while applyFilter not in ["Y", "N"]:
+            applyFilter = input ("Apply filters? (Y/N): ").strip().upper()
+
+        if applyFilter == "Y":
+            dateFilter = askForDate()
+            fandomFilter = askForFandom(dataFrame)
+            shipFilter = askForShip (dataFrame, True)
+            explicitFilter = askForExplicit ()
+            orientationFilter = askForOrientation()
+            giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
+        else:
+            giveUserInfo (dataFrame)
+
+        filterAgain = ""
+        while filterAgain not in ["Y", "N"]:
+            filterAgain = input ("Choose different filters? (Y/N): ").strip().upper()
+        if filterAgain == "N":
+            break
+
+
 def formatTuplesInList (arr):
     formatted_list = [(f"{tag.strip()}: {count}") for tag, count in arr]
     return "\n ".join(formatted_list)
@@ -12,6 +35,9 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
 
     dataFrame = apply_filters (df, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
+    if dataFrame.empty:
+        print ("Empty history, loosen the filters.\n")
+        return
 
     print (f"{len(dataFrame)} total works\n")
 
@@ -48,6 +74,16 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
         print(f" {orientation}: {percentage}")
 
     print ("\nThe most common ship-tag combos are:")
+    tag_ship_counts = generate_common_ship_tags(dataFrame)
+
+    print(tag_ship_counts.head(10))
+
+
+def generate_common_ship_tags (df, ship = None):
+    if ship is not None:
+        dataFrame = df[ship]
+    else:
+        dataFrame = df
     tag_ship_pairs = []
     for _, row in dataFrame.iterrows():
         tags = row["tags"]
@@ -57,9 +93,7 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
 
     pairs = pd.DataFrame(tag_ship_pairs, columns=["tag", "ship"])
     tag_ship_counts = pairs.value_counts().reset_index(name="count")
-
-    print(tag_ship_counts.head(10))
-
+    return tag_ship_counts
 
 
 def apply_filters(df: pd.DataFrame, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
@@ -174,15 +208,16 @@ def askForFandom(df : pd.DataFrame):
         return askForFandom(df)
 
   
-def askForShip (df : pd.DataFrame):
-    filtShip = ''
-    while filtShip not in ['Y', 'N']:
-        print ("Filter by ship? (Y/N) ")
-        filtShip = input().strip().upper()
-    if filtShip == 'N':
-        return None
+def askForShip (df : pd.DataFrame, ask: bool):
+    if (ask):
+        filtShip = ''
+        while filtShip not in ['Y', 'N']:
+            print ("Filter by ship? (Y/N) ")
+            filtShip = input().strip().upper()
+        if filtShip == 'N':
+            return None, None
+        print ("Only works from the ship you insert onwards will be considered.")
 
-    print ("Only works from the ship you insert onwards will be considered.")
     characters = []
     number_characters = None
     while number_characters is None: 
@@ -202,10 +237,17 @@ def askForShip (df : pd.DataFrame):
     for i in range(number_characters):
         name = input(f"Insert the name of character {i+1}: ").strip().lower()
         characters.append(name)
+    results_df = df['ships'].apply(
+        lambda x: pd.Series(matches_characters(x, characters))
+    )
+    mask_series = results_df[0]
+    ship_tag_series = results_df[1]
+   
+    matched_tags = ship_tag_series.tolist()
+    #print("\nMatched Tags:")
+    #print(matched_tags)
 
-    mask = df['ships'].apply(lambda x: matches_characters(x, characters))
-
-    return mask
+    return mask_series, matched_tags[0]
 
 
 
@@ -220,8 +262,8 @@ def matches_characters(ship_tags, target_characters):
         if len(char_names_cleaned) != len(target_characters):
             continue  
 
-        if all(any(t in ch for ch in char_names_cleaned) for t in target_characters):
-            return True
+        if all(any(target in character for character in char_names_cleaned) for target in target_characters):
+            return True, ship
   
     return False
 
