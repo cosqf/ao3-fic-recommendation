@@ -78,20 +78,24 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
 
     print(tag_ship_counts.head(10))
 
-
-def generate_common_ship_tags (df, ship = None):
-    if ship is not None:
-        dataFrame = df[ship]
-    else:
-        dataFrame = df
+def generate_common_ship_tags(dataFrame, ship_tag = None):
     tag_ship_pairs = []
     for _, row in dataFrame.iterrows():
         tags = row["tags"]
         ships = row["ships"]
+        if not isinstance(tags, list):
+            tags = [tags] if pd.notna(tags) else []
+        if not isinstance(ships, list):
+            ships = [ships] if pd.notna(ships) else []
+
         if tags and ships:
             tag_ship_pairs.extend(list(product(tags, ships)))
 
     pairs = pd.DataFrame(tag_ship_pairs, columns=["tag", "ship"])
+
+    if ship_tag is not None:
+        pairs = pairs[pairs['ship'] == ship_tag] 
+
     tag_ship_counts = pairs.value_counts().reset_index(name="count")
     return tag_ship_counts
 
@@ -237,15 +241,11 @@ def askForShip (df : pd.DataFrame, ask: bool):
     for i in range(number_characters):
         name = input(f"Insert the name of character {i+1}: ").strip().lower()
         characters.append(name)
-    results_df = df['ships'].apply(
-        lambda x: pd.Series(matches_characters(x, characters))
-    )
+    results_df = df['ships'].apply(lambda x: pd.Series (matches_characters (x, characters)))
     mask_series = results_df[0]
     ship_tag_series = results_df[1]
    
-    matched_tags = ship_tag_series.tolist()
-    #print("\nMatched Tags:")
-    #print(matched_tags)
+    matched_tags = ship_tag_series.dropna().tolist()
 
     return mask_series, matched_tags[0]
 
