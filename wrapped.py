@@ -250,7 +250,6 @@ def askForShip (df : pd.DataFrame, ask: bool):
     return mask_series, matched_tags[0]
 
 
-
 def matches_characters(ship_tags, target_characters):
     if not isinstance(ship_tags, list):
         return False

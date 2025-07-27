@@ -61,19 +61,19 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
     bookmark_boost: float = 3.0 
 
-    all_history_fic_vectors = combined_sparse_features #[all_history_indices]
+    all_history_fic_vectors = combined_sparse_features
     recency_scores = preprocessed_df['recency_score'].values
     bookmarked_status = preprocessed_df['bookmarked'].values
 
     weights = recency_scores.copy()
-    weights[bookmarked_status] *= bookmark_boost  # type: ignore
+    weights[bookmarked_status] *= bookmark_boost
 
-    total_weight_sum = np.sum(weights) # type: ignore
+    total_weight_sum = np.sum(weights)
     if total_weight_sum == 0:
         print("Warning: Sum of weights is zero. User profile will be a zero vector.")
         return pd.Series(0.0, index=feature_names)
 
-    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis]) # type: ignore
+    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis]) 
 
     summed_sparse_vector = weighted_vectors.sum(axis=0)
     user_profile_vector_sparse = csr_matrix(summed_sparse_vector) / total_weight_sum
@@ -101,7 +101,6 @@ def create_user_profile_from_history(history_df: pd.DataFrame):
         'recency_base': most_recent,
         'feature_names': feature_names_list
     }
-
     return user_profile, model_components
 
 
@@ -124,7 +123,6 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     df_to_score['word_count_normalized'] = word_count_scaler.transform(df_to_score[['word_count']])
     df_to_score["recency_score"] = 1 
 
-
     # TF-IDF
     unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['combined_text_features'])
 
@@ -132,7 +130,6 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     unread_ohe_rating_sparse = ohe_rating_encoder.transform(df_to_score[['rating']])
 
     # word count
-    
     numerical_features_unread = df_to_score[['word_count_normalized', 'recency_score']].values
     numerical_sparse_unread = csr_matrix(numerical_features_unread) 
 

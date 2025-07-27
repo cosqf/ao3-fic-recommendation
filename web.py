@@ -188,7 +188,7 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
     tags = tag_ship_counts['tag'].head(number_tags).tolist()
     formatted_tags = [quote_plus(t) for t in tags]
     
-    formatted_ship_tag = re.sub(r"\([^)]*\)", "", ship_tag).strip()
+    formatted_ship_tag = re.sub(r"\[^]*\)", "", ship_tag).strip()
     formatted_ship_tag = quote_plus(formatted_ship_tag)
 
     unread_df = pd.DataFrame(columns=["fic_id", "rating", "orientations", "fandom", "ships", "tags", "word_count", "last_visited", "bookmarked"])
@@ -262,19 +262,33 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
         print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
 
-def printWorkInfo (work_id, page, i):
+
+def printWorkInfo(work_id, page, i):
     base_url = "https://archiveofourown.org/works/"
     full_url = f"{base_url}{work_id}"
+    print("------------------------")
+    print(f"Suggestion {i}\n")
     page.goto(full_url)
-    preface_locator = page.locator ("div.preface.group")
-    title = preface_locator.locator ("h2.title.heading").inner_text()
-    author = preface_locator.locator ('h3.byline.heading a[rel="author"]').all_text_contents()
-    if not author:
-        author = [preface_locator.locator ('h3.byline.heading').inner_text()]
-    summary = preface_locator.locator ("div.summary.module blockquote.userstuff").inner_text()
+    try:
+        preface_locator = page.locator("div.preface.group:first-of-type")
+        preface_locator.wait_for(state="attached", timeout=10000)
 
-    print ("------------------------")
-    print (f"Suggestion {i}")
-    print (f"Title: '{title}' by {', '.join(author)}")
-    print (f"Summary:\n-- {summary} --\n")
-    print (full_url)
+        title = preface_locator.locator("h2.title.heading").inner_text()
+        
+        author_locator = preface_locator.locator('h3.byline.heading a[rel="author"]')
+        author = author_locator.all_text_contents()
+        if not author:
+            author = [preface_locator.locator('h3.byline.heading').inner_text()]
+            author = [a.replace('by ', '').strip() for a in author] 
+
+        all_summary_blocks = preface_locator.locator("div.summary.module blockquote.userstuff").all()
+        summary_parts = [block.inner_text() for block in all_summary_blocks]
+        summary = "".join(summary_parts).strip()
+        
+    except Exception as e:
+        print(f"Failed to fetch work in: {full_url}\n{e}")
+        return
+
+    print(f"Title: '{title}' by {', '.join(author)}")
+    print(f"Summary:\n-- {summary} --\n")
+    print(full_url)
