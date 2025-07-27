@@ -264,31 +264,19 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
         print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
 
+def printWorkInfo (work_id, page, i):
+    base_url = "https://archiveofourown.org/works/"
+    full_url = f"{base_url}{work_id}"
+    page.goto(full_url)
+    preface_locator = page.locator ("div.preface.group")
+    title = preface_locator.locator ("h2.title.heading").inner_text()
+    author = preface_locator.locator ('h3.byline.heading a[rel="author"]').all_text_contents()
+    if not author:
+        author = [preface_locator.locator ('h3.byline.heading').inner_text()]
+    summary = preface_locator.locator ("div.summary.module blockquote.userstuff").inner_text()
 
-
-#basic url
-# https://archiveofourown.org/works/search?
-
-
-# relationship tags (separated by %2C)
-# work_search%5Brelationship_names%5D=Noelle+Holiday%2FSusie
-# work_search%5Brelationship_names%5D=noelle+holiday%2Fsusie%2Ckris%2Fsusie+%28deltarune%29&
-
-# add tags (separated by %2C)
-# &work_search%5Bfreeform_names%5D=fluff%2Cnonbinary+kris
-
-# sort by kudos:
-# &work_search%5Bsort_column%5D=kudos_count&commit=Search
-
-# no tag:
-# https://archiveofourown.org/works?commit=Sort+and+Filter&work_search%5Bsort_column%5D=kudos_count&work_search%5Bother_tag_names%5D=&work_search%5Bexcluded_tag_names%5D=&work_search%5Bcrossover%5D=&work_search%5Bcomplete%5D=&work_search%5Bwords_from%5D=&work_search%5Bwords_to%5D=&work_search%5Bdate_from%5D=&work_search%5Bdate_to%5D=&work_search%5Bquery%5D=&work_search%5Blanguage_id%5D=&tag_id=Noelle+Holiday*s*Susie
-# with tag:
-# https://archiveofourown.org/works?commit=Sort+and+Filter&work_search%5Bsort_column%5D=kudos_count&include_work_search%5Bfreeform_ids%5D%5B%5D=27174440&work_search%5Bother_tag_names%5D=&work_search%5Bexcluded_tag_names%5D=&work_search%5Bcrossover%5D=&work_search%5Bcomplete%5D=&work_search%5Bwords_from%5D=&work_search%5Bwords_to%5D=&work_search%5Bdate_from%5D=&work_search%5Bdate_to%5D=&work_search%5Bquery%5D=&work_search%5Blanguage_id%5D=&tag_id=Noelle+Holiday*s*Susie
-
-# &tag_id=Nonbinary+Kris+%28Deltarune%29
-# &include_work_search%5Bfreeform_ids%5D%5B%5D=27174440
-
-# https://archiveofourown.org/works/search?work_search%5Brelationship_names%5D=Noelle+Holiday%2FSusie&work_search%5Bfreeform_names%5D=fluff%2Cnonbinary+kris&work_search%5Bsort_column%5D=kudos_count&commit=Search
-# https://archiveofourown.org/works/search?work_search%5Brelationship_names%5D=noelle+holiday%2Fsusie%2Ckris%2Fsusie+%28deltarune%29&work_search%5Bfreeform_names%5D=fluff%2Cnonbinary+kris&work_search%5Bhits%5D=&work_search%5Bkudos_count%5D=&work_search%5Bcomments_count%5D=&work_search%5Bbookmarks_count%5D=&work_search%5Bsort_column%5D=kudos_count&work_search%5Bsort_direction%5D=desc
-# https://archiveofourown.org/works/search?work_search%5Brelationship_names%5D=Noelle+Holiday%2FSusie+%28Deltarune%29&work_search%5Bfreeform_names%5D=Nonbinary+Kris+%28Deltarune%29&work_search%5Bsort_column%5D=kudos_count&commit=Search
-# https://archiveofourown.org/works?commit=Sort+and+Filter&include_work_search%5Bfreeform_ids%5D%5B%5D=27174440&tag_id=Noelle+Holiday*s*Susie
+    print ("------------------------")
+    print (f"Suggestion {i}")
+    print (f"Title: '{title}' by {', '.join(author)}")
+    print (f"Summary:\n-- {summary} --\n")
+    print (full_url)

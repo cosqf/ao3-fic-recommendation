@@ -8,7 +8,7 @@ def giveWrapped (dataFrame):
     while True:
         applyFilter = ""
         while applyFilter not in ["Y", "N"]:
-            applyFilter = input ("Apply filters? (Y/N): ").strip().upper()
+            applyFilter = input ("Apply filters to history summary? (Y/N): ").strip().upper()
 
         if applyFilter == "Y":
             dateFilter = askForDate()
@@ -33,7 +33,7 @@ def formatTuplesInList (arr):
 
 def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
     print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
-
+    print (f"size: {len(df)}")
     dataFrame = apply_filters (df, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
     if dataFrame.empty:
         print ("Empty history, loosen the filters.\n")
@@ -41,8 +41,8 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
 
     print (f"{len(dataFrame)} total works\n")
 
-    tag_counts = Counter(tag.strip() for tags in dataFrame["tags"] for tag in tags)
-    ship_counts = Counter(ship.strip() for ships in dataFrame["ships"] for ship in ships)
+    tag_counts = Counter(tag.strip() for tags in dataFrame["tags"] if tags is not None for tag in tags)
+    ship_counts = Counter(ship.strip() for ships in dataFrame["ships"] if ships is not None for ship in ships)
 
     print ("Top 10 most common tags:\n", formatTuplesInList (tag_counts.most_common(10)))
 
@@ -54,7 +54,7 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
 
 
     print("\nThe fandom percentage is:")
-    formattedFandoms = dataFrame["fandom"].apply(lambda x: ", ".join(x))  # joining the fandoms into a single string (removing [ , ])
+    formattedFandoms = dataFrame["fandom"].apply(lambda x: ", ".join(x) if isinstance (x, list) else x)  # joining the fandoms into a single string (removing [ , ])
 
     fandomCounts = pd.Series(formattedFandoms).value_counts()
     fandomPercentages = round((fandomCounts / len(dataFrame)) * 100)
@@ -64,7 +64,7 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
         print(f" {fandom}: {percentage}")
 
     print ("\nThe orientation percentage is:")
-    formattedOrientations = dataFrame["orientations"].apply(lambda x: ", ".join(x))
+    formattedOrientations = dataFrame["orientations"].apply(lambda x: ", ".join(x) if isinstance (x, list) else x)
 
     orientationCounts = pd.Series(formattedOrientations).value_counts()
     orientationPercentages = round((orientationCounts / len(dataFrame)) * 100)

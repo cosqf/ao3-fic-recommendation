@@ -94,7 +94,8 @@ def create_user_profile_from_history(history_df: pd.DataFrame):
     combined_features_sparse, tfidf_vec, feature_names_list = vectorize_all_features(preprocessed_df, ohe_rating_encoder)
 
     user_profile = build_user_profile(combined_features_sparse, preprocessed_df, feature_names_list)
-    
+    user_profile = user_profile.fillna(0)
+
     model_components = {
         'tfidf_vectorizer': tfidf_vec,
         'ohe_rating_encoder': ohe_rating_encoder,
