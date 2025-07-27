@@ -25,14 +25,12 @@ def logIn(user, pwd, page):
         error_alert = page.locator(".flash.alert")
         if error_alert.count() > 0 and error_alert.is_visible():
             print("login failed!", error_alert.inner_text())
-            time.sleep(5)
             page.close()
             exit()
              
         error_flash = page.locator(".flash.error")
         if error_flash.count() > 0 and error_flash.is_visible():
             print("login failed!", error_flash.inner_text())
-            time.sleep(5)
             page.close()
             exit()
 
@@ -60,7 +58,7 @@ def gettingHistory(page, username, dataFrame):
     )
 
     dataFrame = pd.concat([dataFrame, scraped_history_fics], ignore_index=True)
-    
+    dataFrame.dropna(subset=['fic_id'], inplace=True)
     print("reading finished")
     return dataFrame
 

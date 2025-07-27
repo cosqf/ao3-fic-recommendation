@@ -61,11 +61,9 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
     bookmark_boost: float = 3.0 
 
-    all_history_indices = preprocessed_df.index.tolist()
-    all_history_fic_vectors = combined_sparse_features[all_history_indices]
-    recency_scores = preprocessed_df.loc[all_history_indices, 'recency_score'].values
-
-    bookmarked_status = preprocessed_df.loc[all_history_indices, 'bookmarked'].values
+    all_history_fic_vectors = combined_sparse_features #[all_history_indices]
+    recency_scores = preprocessed_df['recency_score'].values
+    bookmarked_status = preprocessed_df['bookmarked'].values
 
     weights = recency_scores.copy()
     weights[bookmarked_status] *= bookmark_boost  # type: ignore

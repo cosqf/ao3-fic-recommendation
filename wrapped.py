@@ -16,7 +16,7 @@ def giveWrapped (dataFrame):
             shipFilter = askForShip (dataFrame, True)
             explicitFilter = askForExplicit ()
             orientationFilter = askForOrientation()
-            giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
+            giveUserInfo (dataFrame, dateFilter, fandomFilter, shipFilter[0], explicitFilter, orientationFilter)
         else:
             giveUserInfo (dataFrame)
 
@@ -33,7 +33,7 @@ def formatTuplesInList (arr):
 
 def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
     print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
-    print (f"size: {len(df)}")
+
     dataFrame = apply_filters (df, dateFilter, fandomFilter, shipFilter, explicitFilter, orientationFilter)
     if dataFrame.empty:
         print ("Empty history, loosen the filters.\n")

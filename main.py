@@ -14,8 +14,7 @@ warnings.filterwarnings(
     category=FutureWarning
 )
 
-login = True
-wrapped = True
+login = False
 
 dataFrame = pd.DataFrame(columns= ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
 
@@ -38,8 +37,7 @@ else:
     dataFrame = pd.read_json ("data/" + username + "_history_data.json")
     dataFrame['last_visited'] = pd.to_datetime(dataFrame['last_visited'], errors='coerce')
 
-if wrapped:
-    giveWrapped (dataFrame)
+giveWrapped (dataFrame)
 
 user_profile_vector, fitted_model_components = create_user_profile_from_history(dataFrame)
 
@@ -81,6 +79,6 @@ while True:
 
         filterAgain = ""
         while filterAgain not in ["Y", "N"]:
-            filterAgain = input ("Choose different filters? (Y/N): ").strip().upper()
+            filterAgain = input ("Choose a different ship? (Y/N): ").strip().upper()
         if filterAgain == "N":
             break
