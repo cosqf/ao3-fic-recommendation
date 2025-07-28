@@ -65,7 +65,6 @@ while True:
 
         df_unread_fics = scrap_unread_fics (page, dataFrame, tag_ship_counts, ship_tag)
         df_scored_unread_fics = score_unread_fanfics (df_unread_fics, user_profile_vector, fitted_model_components)
-        df_scored_unread_fics.to_json("data/" + username + "_scored_unread_works", date_format='iso')
 
         numberTopWorks = len(df_scored_unread_fics)
         if numberTopWorks == 0:
