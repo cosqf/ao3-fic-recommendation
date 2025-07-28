@@ -8,13 +8,13 @@ from playwright_stealth import Stealth
 import os
 import warnings
 
+login = True
+
 warnings.filterwarnings(
     "ignore",
     message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.",
     category=FutureWarning
 )
-
-login = False
 
 dataFrame = pd.DataFrame(columns= ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
 
@@ -65,6 +65,7 @@ while True:
 
         df_unread_fics = scrap_unread_fics (page, dataFrame, tag_ship_counts, ship_tag)
         df_scored_unread_fics = score_unread_fanfics (df_unread_fics, user_profile_vector, fitted_model_components)
+        df_scored_unread_fics.to_json("data/" + username + "_scored_unread_works", date_format='iso')
 
         numberTopWorks = len(df_scored_unread_fics)
         if numberTopWorks == 0:
@@ -81,4 +82,5 @@ while True:
         while filterAgain not in ["Y", "N"]:
             filterAgain = input ("Choose a different ship? (Y/N): ").strip().upper()
         if filterAgain == "N":
+            page.close()
             break

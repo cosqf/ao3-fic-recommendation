@@ -125,12 +125,9 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
                 print(f"Error processing work {i+1} on page {p}: {e}. Waiting and skipping...")
                 time.sleep(30) 
                 continue
-
-            if max_number_works is not None and stored_num_works >= max_number_works:
-                break
+            
         all_processed_rows.append(pd.DataFrame(rows_on_page, columns=["fic_id", "rating", "orientations", "fandom", "ships", "tags", "word_count", "last_visited", "bookmarked"]))
         
-
         if max_number_works is not None and stored_num_works >= max_number_works:
             break
     if all_processed_rows:
@@ -169,9 +166,10 @@ def processWork(work, is_history : bool):
     words = round(words / 1000) * 1000 if (words > 1000) else 1000
 
     if is_history:
-        last_visited = work.locator ("div.user.module.group h4.viewed.heading").inner_text().split(" ")[2:5]
-        last_visited = ' '.join (last_visited)
-        parsed_date = pd.to_datetime(last_visited, format="%d %b %Y")
+        last_visited = work.locator("div.user.module.group h4.viewed.heading").inner_text()
+        parsed_date = extract_and_parse_last_visited (last_visited)
+        if parsed_date is None:
+            return []
     else:
         parsed_date = None
 
@@ -179,9 +177,31 @@ def processWork(work, is_history : bool):
     return [id, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark]
 
 
+def extract_and_parse_last_visited(full_text):
+    date_pattern = re.compile(r'(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})') 
+    # regex pattern for 2 digits (day), 3 letters (month) and 4 digits (year)
+
+    match = date_pattern.search(full_text)
+    if match:
+        day = match.group(1)
+        month = match.group(2)
+        year = match.group(3)
+        
+        last_visited_str = f"{day} {month} {year}"
+        try:
+            parsed_date = pd.to_datetime(last_visited_str, format="%d %b %Y")
+            return parsed_date
+        except ValueError:
+            print(f"Warning: Could not parse date '{last_visited_str}' from text: {full_text}")
+            return None 
+    else:
+        print(f"Warning: No date found in text: {full_text}")
+        return None
+
 
 def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
     max_number_fics = 200
+    print (f"\nWill now fetch {max_number_fics} unread fanfics for scoring.")
     base_search_url = 'https://archiveofourown.org/works/search?'
     number_tags = 5
 
@@ -204,6 +224,8 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
 
         print(f"searching with {number_tags} tags")
 
+        number_works_to_read = max_number_fics - unread_df.shape[0]
+
         newly_scraped_fics = scrape_works(
             page,
             full_base_url,
@@ -211,7 +233,7 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
             work_list_selector = "#main > ol.work.index.group",
             is_processing_history = False, 
             history_df = pd.concat([history_df, unread_df]),
-            max_number_works = 100 if number_tags > 0 else max_number_fics - unread_df.shape[0]
+            max_number_works = 100 if number_works_to_read > 100 else number_works_to_read
         )
         newly_scraped_fics.drop_duplicates(subset=['fic_id'], inplace=True)
         existing_fic_ids = unread_df['fic_id'].unique()
@@ -261,7 +283,7 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
 
         print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
-
+    print ("finished checking bookmarks")
 
 def printWorkInfo(work_id, page, i):
     base_url = "https://archiveofourown.org/works/"
@@ -270,7 +292,7 @@ def printWorkInfo(work_id, page, i):
     print(f"Suggestion {i}\n")
     page.goto(full_url)
     try:
-        preface_locator = page.locator("div.preface.group:first-of-type")
+        preface_locator = page.locator("#workskin > div.preface.group:first-of-type")
         preface_locator.wait_for(state="attached", timeout=10000)
 
         title = preface_locator.locator("h2.title.heading").inner_text()
