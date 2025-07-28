@@ -15,6 +15,8 @@ warnings.filterwarnings(
     message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.",
     category=FutureWarning
 )
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
 
 dataFrame = pd.DataFrame(columns= ["fic_id", "rating", "orientations" ,"fandom", "ships", "tags",  "word_count", "last_visited", "bookmarked"])
 
