@@ -261,10 +261,20 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
         
         for i in range (count):
             work = work_list.nth (i)
-            if "deleted" in work.get_attribute("class"): 
+            try:
+                if "deleted" in work.get_attribute("class"): 
+                    continue
+
+                work_link_locator = work.locator("h4.heading a[href^='/works/']")
+                work_link_locator.wait_for(state="attached", timeout=15000)
+
+                id = int (work_link_locator.get_attribute("href", timeout=5000)[7:])
+                dataframe.loc[dataframe["fic_id"] == id, "bookmarked"] = True
+            except Exception as e:
+                print(f"Error processing work {i+1} on page {pageNumber}: {e}. Waiting and skipping...")
+                time.sleep(30) 
                 continue
-            id = int(work.locator("h4.heading a[href^='/works/']").get_attribute("href")[7:])
-            dataframe.loc[dataframe["fic_id"] == id, "bookmarked"] = True
+        print(f"Page {pageNumber} of bookmarks read")
 
         # check if has seen all pages 
         numberUsersHeader = page.locator("#main > h2").text_content()
@@ -281,7 +291,6 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
             page.close()
             break
 
-        print(f"Page {pageNumber} of bookmarks read")
         pageNumber +=1
     print ("finished checking bookmarks")
 
