@@ -31,6 +31,7 @@ def formatTuplesInList (arr):
     formatted_list = [(f"{tag.strip()}: {count}") for tag, count in arr]
     return "\n ".join(formatted_list)
 
+
 def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
     print (f"\nFilters: \ndate: {dateFilter}, fandom: {fandomFilter is not None}, ship: {shipFilter is not None}, explicit: {explicitFilter}, orientation: {orientationFilter}\n")
 
@@ -51,7 +52,6 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     print ("\nThe average number of words read is", int (dataFrame["word_count"].mean()))
 
     print ("And the total words read is", int (dataFrame["word_count"].sum()))
-
 
     print("\nThe fandom percentage is:")
     formattedFandoms = dataFrame["fandom"].apply(lambda x: ", ".join(x) if isinstance (x, list) else x)  # joining the fandoms into a single string (removing [ , ])
@@ -77,6 +77,7 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     tag_ship_counts = generate_common_ship_tags(dataFrame)
 
     print(tag_ship_counts.head(10))
+
 
 def generate_common_ship_tags(dataFrame, ship_tag = None):
     tag_ship_pairs = []
@@ -149,6 +150,9 @@ def askForDate():
             continue
         try:
             year = int(year_raw)
+            if not (2000 <= year <= date.today().year):
+                print(f"Year must be between 2000 and {date.today().year}. Please re-enter.")
+                year = None
         except ValueError:
             print("Invalid number format for year. Please re-enter.")
             year = None
@@ -242,6 +246,13 @@ def askForShip (df : pd.DataFrame, ask: bool):
         name = input(f"Insert the name of character {i+1}: ").strip().lower()
         characters.append(name)
     results_df = df['ships'].apply(lambda x: pd.Series (matches_characters (x, characters)))
+
+    if results_df.any().any():
+        return results_df
+    else:
+        print ("Ship wasn't found. Ensure you're not abbreviating or re-check the name in AO3.")
+        return askForShip(df, ask)
+
     mask_series = results_df[0]
     ship_tag_series = results_df[1]
    

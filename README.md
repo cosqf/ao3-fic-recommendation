@@ -33,6 +33,7 @@ Access and run the project online via this [link](https://colab.research.google.
     * On macOS/Linux: `source venv/bin/activate`
 4.  Install dependencies:
     `pip install -r requirements.txt`
+    `playwright install`
 5.  Run the application:
     `python main.py`
 
