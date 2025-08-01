@@ -215,7 +215,6 @@ def askForFandom(df : pd.DataFrame):
         print ("Fandom wasn't found. Ensure you're not abbreviating or re-check the name in AO3.")
         return askForFandom(df)
 
-  
 def askForShip (df : pd.DataFrame, ask: bool):
     if (ask):
         filtShip = ''
@@ -247,12 +246,11 @@ def askForShip (df : pd.DataFrame, ask: bool):
         characters.append(name)
     results_df = df['ships'].apply(lambda x: pd.Series (matches_characters (x, characters)))
 
-    if results_df.any().any():
-        return results_df
-    else:
+    if not results_df.any().any():
         print ("Ship wasn't found. Ensure you're not abbreviating or re-check the name in AO3.")
         return askForShip(df, ask)
-
+    else:
+      print ("Ship found")
     mask_series = results_df[0]
     ship_tag_series = results_df[1]
    
