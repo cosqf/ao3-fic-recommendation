@@ -72,18 +72,24 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
     for p in range(1, last_page + 1):
         current_page_url = base_url_full_query + str(p)
         page.goto(current_page_url)
-        page.wait_for_selector("h2.heading")
+        try:
+            page.wait_for_selector("h2.heading")
 
-        works_main_container = page.locator(work_list_selector)
-        if works_main_container.count() < 1:
-            print(f"No works found on page {p}, skipping...")
-            continue # page might be empty or error
+            works_main_container = page.locator(work_list_selector)
+            if works_main_container.count() < 1:
+                print(f"No works found on page {p}, skipping...")
+                continue # page might be empty or error
 
-        work_list = page.locator("li[role='article']") 
-        work_count_on_page = work_list.count()
-        if work_count_on_page == 0:
-            print(f"No works found on page {p}, skipping...")
-            continue # filter too intense or no results
+            work_list = page.locator("li[role='article']") 
+            work_count_on_page = work_list.count()
+            if work_count_on_page == 0:
+                print(f"No works found on page {p}, skipping...")
+                continue # filter too intense or no results
+            
+        except Exception as e:
+            print (f"Error loading page {p}, waiting and skipping... {e}")
+            time.sleep(30) 
+            continue
 
         print(f"processing {work_count_on_page} works on page {p}")
         rows_on_page = []
@@ -106,7 +112,7 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
                 stored_num_works += 1
             except Exception as e:
                 print(f"Error processing work {i+1} on page {p}: {e}. Waiting and skipping...")
-                time.sleep(30) 
+                time.sleep(15) 
                 continue
 
         if keepGoing == False:
@@ -140,7 +146,11 @@ def processWork(work, is_history : bool):
     orientations = [o.inner_text().strip() for o in work.locator("ul.required-tags li").nth(2).all()]
 
     all_tags = work.locator("li.freeforms").all()
-    tags = [tag.locator("a.tag").inner_text().strip() for tag in all_tags]
+    tags = []
+    for tag in all_tags:
+        if tag.locator("a.tag").count() > 0:
+            tags.append(tag.locator("a.tag").inner_text(timeout=2000).strip())
+
 
     fandoms = [f.inner_text().strip() for f in work.locator("h5.fandoms.heading a.tag").all()]
     fandoms.sort()
@@ -256,26 +266,31 @@ def printWorkInfo(work_id, page, i):
     print("\n------------------------")
     print(f"Suggestion {i}\n")
     page.goto(full_url)
-    try:
-        preface_locator = page.locator("#workskin > div.preface.group:first-of-type")
-        preface_locator.wait_for(state="attached", timeout=10000)
 
-        title = preface_locator.locator("h2.title.heading").inner_text()
-        
-        author_locator = preface_locator.locator('h3.byline.heading a[rel="author"]')
-        author = author_locator.all_text_contents()
-        if not author:
-            author = [preface_locator.locator('h3.byline.heading').inner_text()]
-            author = [a.replace('by ', '').strip() for a in author] 
+    if page.url == "https://archiveofourown.org/users/login?restricted=true": # work is only available for logged in users
+        print ("Work is private, details hidden")
+        print (full_url)
+    else:
+        try:
+            preface_locator = page.locator("#workskin > div.preface.group:first-of-type")
+            preface_locator.wait_for(state="attached", timeout=10000)
 
-        all_summary_blocks = preface_locator.locator("div.summary.module blockquote.userstuff").all()
-        summary_parts = [block.inner_text() for block in all_summary_blocks]
-        summary = "".join(summary_parts).strip()
-        
-    except Exception as e:
-        print(f"Failed to fetch work in: {full_url}\n{e}")
-        return
+            title = preface_locator.locator("h2.title.heading").inner_text()
+            
+            author_locator = preface_locator.locator('h3.byline.heading a[rel="author"]')
+            author = author_locator.all_text_contents()
+            if not author:
+                author = [preface_locator.locator('h3.byline.heading').inner_text()]
+                author = [a.replace('by ', '').strip() for a in author] 
 
-    print(f"Title: '{title}' by {', '.join(author)}")
-    print(f"Summary:\n-- {summary} --\n")
-    print(full_url)
+            all_summary_blocks = preface_locator.locator("div.summary.module blockquote.userstuff").all()
+            summary_parts = [block.inner_text() for block in all_summary_blocks]
+            summary = "".join(summary_parts).strip()
+            
+        except Exception as e:
+            print(f"Failed to fetch work in: {full_url}\n{e}")
+            return
+
+        print(f"Title: '{title}' by {', '.join(author)}")
+        print(f"Summary:\n-- {summary} --\n")
+        print(full_url)

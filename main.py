@@ -8,6 +8,7 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 from config import WORK_DF_COL
 
+# setup
 warnings.filterwarnings(
     "ignore",
     message="The behavior of DataFrame concatenation with empty or all-NA entries is deprecated.",
@@ -17,6 +18,8 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 os.makedirs("data", exist_ok=True)
+
+
 
 username = input ("User: ").lower().strip()
 
@@ -71,9 +74,11 @@ with Stealth().use_sync(sync_playwright()) as pw:
         
         topx = numberTopWorks if numberTopWorks < 10 else 10
         topx_work_ids = df_scored_unread_fics['fic_id'].head(topx)
-
+        
+        loggedOutpage = settingUpBrowser(pw)
         for i in range (topx):
-            printWorkInfo (topx_work_ids.iloc[i], page, i+1)
+            printWorkInfo (topx_work_ids.iloc[i], loggedOutpage, i+1)
+        loggedOutpage.close()
 
         filterAgain = ""
         while filterAgain not in ["Y", "N"]:
