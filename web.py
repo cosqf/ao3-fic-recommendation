@@ -268,25 +268,14 @@ def printWorkInfo(work_id, page, i):
     page.goto(full_url)
 
     if page.url == "https://archiveofourown.org/users/login?restricted=true": # work is only available for logged in users
-        print ("Work is private, details hidden")
+        print ("Work is private, details hidden! Check it out:")
         print (full_url)
     else:
         try:
-            preface_locator = page.locator("#workskin > div.preface.group:first-of-type")
-            preface_locator.wait_for(state="attached", timeout=10000)
-
-            title = preface_locator.locator("h2.title.heading").inner_text()
-            
-            author_locator = preface_locator.locator('h3.byline.heading a[rel="author"]')
-            author = author_locator.all_text_contents()
-            if not author:
-                author = [preface_locator.locator('h3.byline.heading').inner_text()]
-                author = [a.replace('by ', '').strip() for a in author] 
-
-            all_summary_blocks = preface_locator.locator("div.summary.module blockquote.userstuff").all()
-            summary_parts = [block.inner_text() for block in all_summary_blocks]
-            summary = "".join(summary_parts).strip()
-            
+            if check_for_nsfw_warning(page):
+                title, author, summary = get_info_nsfw_work (page)
+            else:
+                title, author, summary = get_info_work (page)
         except Exception as e:
             print(f"Failed to fetch work in: {full_url}\n{e}")
             return
@@ -294,3 +283,49 @@ def printWorkInfo(work_id, page, i):
         print(f"Title: '{title}' by {', '.join(author)}")
         print(f"Summary:\n-- {summary} --\n")
         print(full_url)
+
+
+def check_for_nsfw_warning(page):
+    try:
+        nsfw_heading = page.locator("p.caution.notice")
+        nsfw_heading.wait_for(state="visible", timeout=3000)
+        return True
+    except Exception:
+        return False
+    
+def get_info_nsfw_work (page):
+    work_locator = page.locator ("ol.work.index.group")
+    work_locator.wait_for(state="attached", timeout=10000)
+
+    title = work_locator.locator("h4.heading > a:nth-of-type(1)").inner_text().strip()
+
+    author_locator = work_locator.locator("h4.heading > a[rel='author']")
+    author = author_locator.all_text_contents()
+    if not author:
+        author = [work_locator.locator('h4.heading').inner_text()]
+        author = [a.replace('by ', '').strip() for a in author] 
+
+    all_summary_blocks = work_locator.locator("blockquote.userstuff.summary").all()
+    summary_parts = [block.inner_text() for block in all_summary_blocks]
+    summary = "".join(summary_parts).strip()
+
+    return title, author, summary
+
+
+def get_info_work (page):
+    preface_locator = page.locator("#workskin > div.preface.group:first-of-type")
+    preface_locator.wait_for(state="attached", timeout=10000)
+
+    title = preface_locator.locator("h2.title.heading").inner_text().strip()
+    
+    author_locator = preface_locator.locator('h3.byline.heading a[rel="author"]')
+    author = author_locator.all_text_contents()
+    if not author:
+        author = [preface_locator.locator('h3.byline.heading').inner_text()]
+        author = [a.replace('by ', '').strip() for a in author] 
+
+    all_summary_blocks = preface_locator.locator("div.summary.module blockquote.userstuff").all()
+    summary_parts = [block.inner_text() for block in all_summary_blocks]
+    summary = "".join(summary_parts).strip()
+
+    return title, author, summary
