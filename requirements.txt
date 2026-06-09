@@ -4,3 +4,4 @@ playwright_stealth
 counter
 product
 scikit-learn
+streamlit

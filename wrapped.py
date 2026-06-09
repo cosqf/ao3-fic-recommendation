@@ -73,6 +73,9 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     for orientation, percentage in o_formattedPercentages.head(10).items():
         print(f" {orientation}: {percentage}")
 
+    author_counts = Counter(author.strip() for authors in dataFrame["author"] if authors is not None for author in authors)
+    print("\nYour favorite authors are:\n", formatTuplesInList (author_counts.most_common(10)))
+
     print ("\nThe most common ship-tag combos are:")
     tag_ship_counts = generate_common_ship_tags(dataFrame)
 

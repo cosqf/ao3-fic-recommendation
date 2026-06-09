@@ -117,7 +117,7 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
 
         if keepGoing == False:
             break
-        all_processed_rows.append(pd.DataFrame(rows_on_page, columns=["fic_id", "rating", "orientations", "fandom", "ships", "tags", "word_count", "last_visited", "bookmarked"]))
+        all_processed_rows.append(pd.DataFrame(rows_on_page, columns=WORK_DF_COL))
         
         if max_number_works is not None and stored_num_works >= max_number_works:
             break
@@ -137,6 +137,25 @@ def processWork(work, is_history : bool):
         return []
     
     id = int (work.get_attribute("id")[5:])
+
+    title = ""
+    author = []
+
+    header = work.locator("div.header.module, div.anonymous.header.module")
+    heading = header.locator("h4.heading")
+
+    if heading.locator("a").count() > 0:
+        title = heading.locator("a").first.inner_text().strip()
+
+    author_links = heading.locator("a[rel='author']")
+    if author_links.count() > 0:
+        author = [a.inner_text().strip() for a in author_links.all()]
+    else:
+        heading_text = heading.inner_text()
+        if "by Anonymous" in heading_text:
+            author = ["Anonymous"]
+        else:
+            author = ["Unknown"]
 
     all_ships = work.locator("li.relationships").all()
     ships = [ship.locator("a.tag").inner_text().strip() for ship in all_ships]
@@ -167,7 +186,7 @@ def processWork(work, is_history : bool):
         parsed_date = None
 
     bookmark = False
-    return [id, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark]
+    return [id, title, author, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark]
 
 
 def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):

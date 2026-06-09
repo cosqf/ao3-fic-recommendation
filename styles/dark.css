@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap');
+
+.stApp {
+    background-image: radial-gradient(#1e1a12 1px, transparent 0) !important;
+    background-size: 24px 24px !important;
+    font-family: 'EB Garamond', serif !important;
+}
+[data-testid="stMainBlockContainer"] {
+    background: #1c1710 !important;
+    border: 1px solid #3a2f1e !important;
+    border-top: 5px solid #a33520 !important;
+    border-radius: 4px !important;
+    padding: 50px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45) !important;
+    margin-top: 30px !important;
+    max-width: 900px !important;
+}
+[data-testid="stSidebar"] {
+    border-right: 1px solid #3a2f1e !important;
+}
+h1, h2, h3 {
+    font-family: 'EB Garamond', serif !important;
+    color: #c9a87a !important;
+    font-weight: 600 !important;
+}
+.serif-body {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: #c2b59e;
+}
+.archive-sub {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.85rem;
+    color: #6b5c42;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+}
+.flourish {
+    text-align: center;
+    margin: 25px 0;
+    color: #b04030;
+    font-size: 1.5rem;
+    opacity: 0.6;
+}
+div.stButton > button {
+    background-color: #a33520 !important;
+    color: #f0e6d3 !important;
+    font-family: 'Courier Prime', monospace !important;
+    border: 1px solid #a33520 !important;
+    border-radius: 2px !important;
+    padding: 10px 24px !important;
+    transition: all 0.2s ease !important;
+}
+div.stButton > button:hover {
+    background-color: #1c1710 !important;
+    color: #c9a87a !important;
+    border: 1px solid #a33520 !important;
+}
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stSelectbox"] select {
+    border-color: #3a2f1e !important;
+}
+div[data-testid="stCheckbox"] label p {
+    font-family: 'EB Garamond', serif !important;
+    font-size: 1.1rem !important;
+}

@@ -59,7 +59,7 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 
 
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
-    bookmark_boost: float = 3.0 
+    bookmark_boost: float = 5.0 
 
     all_history_fic_vectors = combined_sparse_features
     recency_scores = preprocessed_df['recency_score'].values

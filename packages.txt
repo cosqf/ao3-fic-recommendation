@@ -1,0 +1,7 @@
+libicu-dev
+libxml2
+libflite1
+libharfbuzz-icu0
+libenchant-2-2
+libhyphen0
+libwoff1
