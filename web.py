@@ -1,63 +1,123 @@
 import time
 from web_utils import *
 import pandas as pd
+import queue
+import threading
+import streamlit as st
 from config import WORK_DF_COL
 
-def logIn(user, pwd, page):
-    login_url = "https://archiveofourown.org/users/login"
-    try:
+def logIn(worker, user, pwd, status_widget=None):
+    report("logging in...", status_widget)
+
+    def _login(page):
+        login_url = "https://archiveofourown.org/users/login"
         page.goto(login_url)
 
         page.fill("#user_login", user)
         page.fill("#user_password", pwd)
-
-        print ("logging in...")
-
-        page.locator ("#new_user > dl > dd.submit.actions > input").click()
+        page.locator("#new_user > dl > dd.submit.actions > input").click()
        
         error_alert = page.locator(".flash.alert")
         if error_alert.count() > 0 and error_alert.is_visible():
-            print("login failed!", error_alert.inner_text())
-            page.close()
-            exit()
+            # Return tuple: (Success_Boolean, Message_String)
+            return False, f"login failed! {error_alert.inner_text()}"
              
         error_flash = page.locator(".flash.error")
         if error_flash.count() > 0 and error_flash.is_visible():
-            print("login failed!", error_flash.inner_text())
-            page.close()
-            exit()
+            return False, f"login failed! {error_flash.inner_text()}"
 
         page.wait_for_selector("#dashboard") 
+        return True, f"login successful!"
 
-        print(f"login successful! current url: {page.url}")
-        return page  
-                
+    try:
+        success, message = worker.execute(_login)
     except Exception as e:
-        print(f"Error: {e}")
-        exit()
+        report(f"Error: {e}", status_widget, is_error=True)
+        return False
+
+    if success:
+        report(message, status_widget)
+        return True
+    else:
+        report(message, status_widget, is_error=True)
+        return False     
 
 
-def gettingHistory(page, username, oldDf):
+def gettingHistory(worker, username, oldDf):
     link_base = f"https://archiveofourown.org/users/{username}/readings?page="
+    progress_q = queue.Queue()
     
-    print("Getting ready to read the history...")
+    with st.container(border=True):
+        st.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Compiling Ledger...</div>', unsafe_allow_html=True)
+        progress_bar = st.progress(0)
+        
+        st.write("")
+        
+        spacer_left, col1, col2, spacer_right = st.columns([1.7, 1, 1, 1.7])
+        with col1:
+            page_metric = st.empty()
+            page_metric.metric("Page Progress", "1 / ?")
+        with col2:
+            works_metric = st.empty()
+            works_metric.metric("Works Found", "0")
+            
+        st.divider()
+        reading_status = st.empty()
+        title_status = st.empty()
 
-    scraped_history_fics = scrape_works(
-        page,
-        link_base,
-        pagination_selector=".pagination.actions.pagy",
-        work_list_selector="#main > ol.reading.work.index.group", 
-        is_processing_history=True,
-        history_df=oldDf
-    )
+    def _scrape_job(page):
+        return scrape_works(
+            page, link_base,
+            pagination_selector=".pagination.actions.pagy",
+            work_list_selector="#main > ol.reading.work.index.group", 
+            is_processing_history=True,
+            history_df=oldDf,
+            progress_q=progress_q 
+        )
 
-    dataFrame = pd.concat([oldDf, scraped_history_fics], ignore_index=True)
+    holder = {}
+    done = threading.Event()
+    worker._queue.put((_scrape_job, holder, done))
+
+    while not done.wait(timeout=0.1):
+        while not progress_q.empty():
+            msg = progress_q.get()
+            
+            if "total_pages" in msg and "current_page" in msg:
+                pct = min(1.0, msg["current_page"] / msg["total_pages"])
+                progress_bar.progress(pct)
+                page_metric.metric("Page Progress", f"{msg['current_page']} / {msg['total_pages']}")
+                
+            if "valid_works" in msg:
+                works_metric.metric("Works Found", str(msg['valid_works']))
+                
+            if "title" in msg:
+                display_title = msg['title'][:55] + "..." if len(msg['title']) > 55 else msg['title']
+                
+                title_html = f"""
+                <div style='text-align: center; line-height: 1.4;'>
+                    <span style='color: gray; font-size: 0.9em;'>Currently Reading</span><br>
+                    <span style='font-size: 1.1em;'><i>{display_title}</i></span>
+                    <p></p>
+                </div>
+                """
+                title_status.markdown(title_html, unsafe_allow_html=True)
+
+
+    if holder.get("error"):
+        st.error(f"Error during scraping: {holder['error']}")
+        return oldDf
+
+    dataFrame = pd.concat([oldDf, holder["result"]], ignore_index=True)
     dataFrame.dropna(subset=['fic_id'], inplace=True)
-    print("finished reading history")
+    
+    st.balloons()
+    progress_bar.progress(1.0)
+    title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Done!</b></p>", unsafe_allow_html=True)
+    
     return dataFrame
 
-
-def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, max_number_works = None):
+def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, max_number_works=None, progress_q=None):
     all_processed_rows = []
     stored_num_works = 0
     print(f"Navigating to the first page: {base_url_full_query}1")
@@ -70,6 +130,8 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
     print("total pages to read: ", last_page)
     print("starting to read")
     for p in range(1, last_page + 1):
+        if progress_q:
+            progress_q.put({"current_page": p, "total_pages": last_page, "valid_works": stored_num_works})
         current_page_url = base_url_full_query + str(p)
         page.goto(current_page_url)
         try:
@@ -100,6 +162,10 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
 
                 if processed_work == []:
                     continue
+
+                if progress_q:
+                    progress_q.put({"title": processed_work[1]})
+
                 if (history_df['fic_id'] == processed_work[0]).any():
                     if is_processing_history:
                         print (f"-- stopping early! at work {i+1} on page {p}")
@@ -110,6 +176,8 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
                 
                 rows_on_page.append(processed_work)
                 stored_num_works += 1
+                if progress_q:
+                     progress_q.put({"valid_works": stored_num_works})
             except Exception as e:
                 print(f"Error processing work {i+1} on page {p}: {e}. Waiting and skipping...")
                 time.sleep(15) 

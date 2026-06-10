@@ -6,8 +6,15 @@ import pandas as pd
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
         browser = pw.chromium.launch(headless=True).new_context(user_agent=agent)
-        return browser.new_page()
+        return browser
 
+def report(text, status_widget=None, is_error=False):
+    print(text)
+    if status_widget:
+        if is_error:
+            status_widget.error(text)
+        else:
+            status_widget.markdown(f'<p class="archive-sub">{text}</p>', unsafe_allow_html=True)
 
 def get_number_of_pages_from_pagination (page, pagination_selector):
     pagination_locator = page.locator(pagination_selector)

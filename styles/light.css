@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap');
 
 .stApp {
-    background-image: radial-gradient(#f4edd2 1px, transparent 0) !important;
+    background-image: radial-gradient(#e9e1c6 1px, transparent 0) !important;
     background-size: 24px 24px !important;
     font-family: 'EB Garamond', serif !important;
 }

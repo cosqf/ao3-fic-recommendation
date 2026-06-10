@@ -7,9 +7,12 @@ import getpass, os, warnings
 from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 from config import WORK_DF_COL
+
 import streamlit as st 
 from pages.Intro import intro
 from pages.Get_History import get_history
+import atexit
+from browser_worker import PlaywrightWorker
 
 def main():
     # setup
@@ -23,12 +26,10 @@ def main():
 
     os.makedirs("data", exist_ok=True)
 
-
-
     username = input ("User: ").lower().strip()
 
     with Stealth().use_sync(sync_playwright()) as pw:
-        page = settingUpBrowser(pw)
+        page = settingUpBrowser(pw).new_page()
         password = getpass.getpass('Password:')
 
         try:
@@ -45,7 +46,6 @@ def main():
         dataFrame['bookmarked'] = dataFrame['bookmarked'].astype(bool)
         dataFrame.to_json ("data/" + username + "_history_data.json",  date_format='iso')
         dataFrame['last_visited'] = pd.to_datetime(dataFrame['last_visited'], errors='coerce')
-
 
         giveWrapped (dataFrame)
 
@@ -94,32 +94,12 @@ def main():
 
     print ("closing program!")
 
-THEMES = {
-    "light": {
-        "--c-dot":       "#f4edd2",
-        "--c-container": "#fffdf9",
-        "--c-border":    "#dcd1b4",
-        "--c-shadow":    "rgba(43,38,31,0.05)",
-        "--c-accent":    "#8c2d19",
-        "--c-heading":   "#4a150b",
-        "--c-body":      "#3d352a",
-        "--c-muted":     "#8c7e6b",
-        "--c-btn-bg":    "#4a150b",
-        "--c-btn-text":  "#fcf8f2",
-    },
-    "dark": {
-        "--c-dot":       "#1e1a12",
-        "--c-container": "#1c1710",
-        "--c-border":    "#3a2f1e",
-        "--c-shadow":    "rgba(0,0,0,0.45)",
-        "--c-accent":    "#a33520",
-        "--c-heading":   "#c9a87a",
-        "--c-body":      "#c2b59e",
-        "--c-muted":     "#6b5c42",
-        "--c-btn-bg":    "#a33520",
-        "--c-btn-text":  "#f0e6d3",
-    },
-}
+
+@st.cache_resource
+def get_worker():
+    worker = PlaywrightWorker()
+    atexit.register(worker.stop)
+    return worker
 
 def main2():
     st.set_page_config(page_title="AO3 Stats", layout="centered")
@@ -140,10 +120,10 @@ def main2():
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
     # routing
-    print (st.session_state.current_page)
+    print (f"- {st.session_state.current_page}")
     routes = {
         "intro":    intro,
-        "progress": get_history,
+        "get_history": get_history,
     }
 
     page = st.session_state.current_page

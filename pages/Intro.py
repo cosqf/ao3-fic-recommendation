@@ -1,9 +1,9 @@
 import streamlit as st
 import json
-
+import pandas as pd
+from config import WORK_DF_COL
 
 def intro():
-    # Header & Meta Info
     st.markdown('<div class="archive-sub">AO3 Stats // Reading Ledger</div>', unsafe_allow_html=True)
     st.title("AO3 History Dashboard")
     
@@ -23,7 +23,7 @@ def intro():
     with col1:
         st.markdown("### Option 1: Upload JSON")
         st.markdown('<p class="serif-body" style="font-size: 1rem;">If you already have a saved history file, drop it here to open it instantly.</p>', unsafe_allow_html=True)
-        find_unread = st.checkbox("Find unread fics besides these", value=False)
+        find_read = st.checkbox("Read history for newer fics", value=False)
 
         uploaded_file = st.file_uploader(
             "Upload your history JSON file", 
@@ -33,12 +33,13 @@ def intro():
         
         if uploaded_file is not None:
             try:
-                history_data = json.load(uploaded_file)
+                history_data = pd.read_json(uploaded_file)
+                history_data['last_visited'] = pd.to_datetime(history_data['last_visited'], errors='coerce')
                 st.session_state.df = history_data
                 st.success("File uploaded successfully.")
                 
-                if find_unread:
-                    st.session_state.current_page = "progress"
+                if find_read:
+                    st.session_state.current_page = "get_history"
                 else:
                     st.session_state.current_page = "stats"
                 st.rerun()
@@ -49,32 +50,9 @@ def intro():
         st.markdown("### Option 2: Get Live History")
         st.markdown('<p class="serif-body" style="font-size: 1rem;">Log into your account to let the scraper scan and pull your history pages automatically.</p>', unsafe_allow_html=True)
         st.write("")         
-        st.write("") 
         st.write("")
         
         if st.button("FETCH FROM AO3 →", use_container_width=True):
-            st.session_state.current_page = "progress"
+            st.session_state.df = pd.DataFrame(columns= WORK_DF_COL)
+            st.session_state.current_page = "get_history"
             st.rerun()
-
-# --- App Initialization & Routing Test Block ---
-if __name__ == "__main__":
-    # Initialize basic routing defaults if testing this file directly
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "intro"
-    if "df" not in st.session_state:
-        st.session_state.df = None
-
-    if st.session_state.current_page == "intro":
-        intro()
-    elif st.session_state.current_page == "progress":
-        st.title("Transitioning to Live Scraper Screen...")
-        if st.button("← Back to Archive Document"):
-            st.session_state.current_page = "intro"
-            st.rerun()
-    elif st.session_state.current_page == "stats":
-        st.title("📊 Your Stats Dashboard Layout")
-        if st.button("← Reset Dossier"):
-            st.session_state.current_page = "intro"
-            st.session_state.df = None
-            st.rerun()
-
