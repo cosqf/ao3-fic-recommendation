@@ -9,8 +9,10 @@ from playwright_stealth import Stealth
 from config import WORK_DF_COL
 
 import streamlit as st 
-from pages.Intro import intro
-from pages.Get_History import get_history
+from page.Intro import intro
+from page.Get_History import get_history
+from page.Stats import stats
+from page.Wrapper import wrapper
 import atexit
 from browser_worker import PlaywrightWorker
 
@@ -122,8 +124,10 @@ def main2():
     # routing
     print (f"- {st.session_state.current_page}")
     routes = {
-        "intro":    intro,
+        "intro": intro,
         "get_history": get_history,
+        "wrapper": wrapper,
+        "stats": stats,
     }
 
     page = st.session_state.current_page

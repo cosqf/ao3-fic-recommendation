@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import pandas as pd
+import re
 from config import WORK_DF_COL
 
 def intro():
@@ -23,25 +24,35 @@ def intro():
     with col1:
         st.markdown("### Option 1: Upload JSON")
         st.markdown('<p class="serif-body" style="font-size: 1rem;">If you already have a saved history file, drop it here to open it instantly.</p>', unsafe_allow_html=True)
-        find_read = st.checkbox("Read history for newer fics", value=False)
+        find_read = st.checkbox("Read history for newer fics", value=False, help="If selected, your history will be pulled until a fic that has already been saved is found.")
 
         uploaded_file = st.file_uploader(
             "Upload your history JSON file", 
             type=["json"], 
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            max_upload_size = 10
         )
         
         if uploaded_file is not None:
             try:
+                filename = uploaded_file.name
+                match = re.match(r'(\w+)_history_data\.json', filename)
+                if match:
+                    username = match.group(1)
+                    if username != "-1":
+                        st.session_state.username = username
+                        
                 history_data = pd.read_json(uploaded_file)
-                history_data['last_visited'] = pd.to_datetime(history_data['last_visited'], errors='coerce')
+                history_data['last_visited'] = pd.to_datetime(history_data['last_visited'], unit='ms', errors='coerce')
+
+                print (history_data['last_visited'].max())
                 st.session_state.df = history_data
                 st.success("File uploaded successfully.")
                 
                 if find_read:
                     st.session_state.current_page = "get_history"
                 else:
-                    st.session_state.current_page = "stats"
+                    st.session_state.current_page = "wrapper"
                 st.rerun()
             except Exception as e:
                 st.error(f"Error reading file: {e}")
@@ -50,6 +61,8 @@ def intro():
         st.markdown("### Option 2: Get Live History")
         st.markdown('<p class="serif-body" style="font-size: 1rem;">Log into your account to let the scraper scan and pull your history pages automatically.</p>', unsafe_allow_html=True)
         st.write("")         
+        st.write("")
+        st.write("")
         st.write("")
         
         if st.button("FETCH FROM AO3 →", use_container_width=True):

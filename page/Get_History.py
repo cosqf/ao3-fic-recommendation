@@ -1,5 +1,5 @@
 import streamlit as st 
-from web import logIn, gettingHistory, checkBookmarks, scrap_unread_fics, printWorkInfo
+from web import logIn, gettingHistory, gettingBookmarks, checkBookmarks, scrap_unread_fics, printWorkInfo
 
 def get_history():
     st.markdown('<div class="archive-sub">Reading AO3 // Fetching Ledger</div>', unsafe_allow_html=True)
@@ -44,8 +44,9 @@ def get_history():
         if not st.session_state.get("scrape_complete", False):
             
             updated_df = gettingHistory(worker, st.session_state.username, st.session_state.df)
+            final_df = gettingBookmarks(worker, st.session_state.username, updated_df)
             
-            st.session_state.df = updated_df
+            st.session_state.df = final_df
             st.session_state.scrape_complete = True
             st.rerun()
             
@@ -68,8 +69,8 @@ def get_history():
                     use_container_width=True
                 )
             with col2:
-                if st.button("Enter the Archives (Go to Stats) →", type="primary", use_container_width=True):
-                    st.session_state.current_page = "stats" 
+                if st.button("Enter the Archives →", type="primary", use_container_width=True):
+                    st.session_state.current_page = "wrapper" 
                     st.rerun()
         
     st.markdown("---")

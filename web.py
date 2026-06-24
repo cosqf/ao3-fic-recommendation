@@ -5,6 +5,7 @@ import queue
 import threading
 import streamlit as st
 from config import WORK_DF_COL
+import math
 
 def logIn(worker, user, pwd, status_widget=None):
     report("logging in...", status_widget)
@@ -116,6 +117,68 @@ def gettingHistory(worker, username, oldDf):
     title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Done!</b></p>", unsafe_allow_html=True)
     
     return dataFrame
+
+def gettingBookmarks(worker, username, dataFrame):
+    progress_q = queue.Queue()
+    
+    with st.container(border=True):
+        st.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Cross-referencing Bookmarks...</div>', unsafe_allow_html=True)
+        progress_bar = st.progress(0)
+        
+        st.write("")
+        spacer_left, col1, col2, spacer_right = st.columns([1.7, 1, 1, 1.7])
+        with col1:
+            page_metric = st.empty()
+            page_metric.metric("Page Progress", "1 / ?")
+        with col2:
+            bookmarks_metric = st.empty()
+            bookmarks_metric.metric("Checked", "0")
+            
+        st.divider()
+        title_status = st.empty()
+
+    def _bookmark_job(page):
+        return checkBookmarks(username, dataFrame, page, progress_q=progress_q)
+
+    holder = {}
+    done = threading.Event()
+    worker._queue.put((_bookmark_job, holder, done))
+
+    bookmarks_tagged = 0
+
+    while not done.wait(timeout=0.1):
+        while not progress_q.empty():
+            msg = progress_q.get()
+            
+            if "total_pages" in msg and "current_page" in msg:
+                tot = msg["total_pages"] if isinstance(msg["total_pages"], int) else 1
+                cur = msg["current_page"]
+                pct = min(1.0, cur / tot)
+                progress_bar.progress(pct)
+                page_metric.metric("Page Progress", f"{cur} / {tot}")
+                
+            if "title" in msg:
+                bookmarks_tagged += 1
+                bookmarks_metric.metric("Checked", str(bookmarks_tagged))
+                display_title = msg['title'][:55] + "..." if len(msg['title']) > 55 else msg['title']
+                
+                title_html = f"""
+                <div style='text-align: center; line-height: 1.4;'>
+                    <span style='color: gray; font-size: 0.9em;'>Validating Match</span><br>
+                    <span style='font-size: 1.1em;'><i>{display_title}</i></span>
+                    <p></p>
+                </div>
+                """
+                title_status.markdown(title_html, unsafe_allow_html=True)
+
+    if holder.get("error"):
+        st.error(f"Error during bookmark scraping: {holder['error']}")
+        return dataFrame
+
+    progress_bar.progress(1.0)
+    title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Bookmarks Synchronized!</b></p>", unsafe_allow_html=True)
+    
+    return holder["result"]
 
 def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, max_number_works=None, progress_q=None):
     all_processed_rows = []
@@ -230,7 +293,8 @@ def processWork(work, is_history : bool):
 
     rating = work.locator("ul.required-tags li").nth(0).inner_text().strip()
 
-    orientations = [o.inner_text().strip() for o in work.locator("ul.required-tags li").nth(2).all()]
+    all_orientations = work.locator("ul.required-tags li").nth(2).inner_text().strip()
+    orientations = [o.strip() for o in all_orientations.split(',') if o.strip()]
 
     all_tags = work.locator("li.freeforms").all()
     tags = []
@@ -256,18 +320,18 @@ def processWork(work, is_history : bool):
     bookmark = False
     return [id, title, author, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark]
 
-
-def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
+def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=None):
     max_number_fics = 200
-    print (f"\nWill now fetch {max_number_fics} unread fanfics for scoring.")
+    if progress_q: progress_q.put({"status": f"Will now fetch {max_number_fics} unread fanfics for scoring."})
+    
     base_search_url = 'https://archiveofourown.org/works/search?'
     number_tags = 5
 
-    formatted_tags, formatted_ship_tag = format_unread_fic_tags (number_tags, tag_ship_counts, ship_tag)
+    formatted_tags, formatted_ship_tag = format_unread_fic_tags(number_tags, tag_ship_counts, ship_tag)
 
     unread_df = pd.DataFrame(columns=WORK_DF_COL)
 
-    while len (unread_df) < max_number_fics and number_tags >= 0:
+    while len(unread_df) < max_number_fics and number_tags >= 0:
         current_url_query = f"work_search%5Brelationship_names%5D={formatted_ship_tag}&work_search%5Bfreeform_names%5D="
         
         for t in range(number_tags):
@@ -276,40 +340,59 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag):
         current_url_query += "&work_search%5Bsort_column%5D=kudos_count&commit=Search&page="
         full_base_url = base_search_url + current_url_query
 
-        print(f"searching with {number_tags} tags")
+        if progress_q: progress_q.put({"status": f"Searching with {number_tags} tags..."})
 
-        number_works_to_read = max_number_fics - len (unread_df)
+        number_works_to_read = max_number_fics - len(unread_df)
 
         newly_scraped_fics = scrape_works(
             page,
             full_base_url,
-            pagination_selector = "ol.pagination.actions",
-            work_list_selector = "#main > ol.work.index.group",
-            is_processing_history = False, 
-            history_df = pd.concat([history_df, unread_df]),
-            max_number_works = 100 if number_works_to_read > 100 else number_works_to_read
+            pagination_selector="ol.pagination.actions",
+            work_list_selector="#main > ol.work.index.group",
+            is_processing_history=False, 
+            history_df=pd.concat([history_df, unread_df]),
+            max_number_works=100 if number_works_to_read > 100 else number_works_to_read,
+            progress_q=progress_q # We pass the queue deeper!
         )
         newly_scraped_fics.drop_duplicates(subset=['fic_id'], inplace=True)
         existing_fic_ids = unread_df['fic_id'].unique()
         newly_scraped_fics = newly_scraped_fics[~newly_scraped_fics['fic_id'].isin(existing_fic_ids)]
 
         unread_df = pd.concat([unread_df, newly_scraped_fics], ignore_index=True)
-        print(f"currently have {len (unread_df)} unread fics stored\n")
-
+        
+        if progress_q: progress_q.put({"valid_works": len(unread_df)})
         number_tags -= 1 
 
-    print(f"Finished getting unread fics, with {len (unread_df)} fics")
+    if progress_q: progress_q.put({"status": f"Finished getting unread fics, with {len(unread_df)} fics"})
     return unread_df
 
             
-def checkBookmarks (username, dataframe : pd.DataFrame, page):
+def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
     print ("checking bookmarks")
+    if progress_q: progress_q.put({"status": "Checking bookmarks..."})
     base_url = f"https://archiveofourown.org/users/{username}/bookmarks?page="
     pageNumber = 1
+    total_pages = "?"
+    
     while True:
         url = base_url + str(pageNumber)
         page.goto(url)
         
+        numberUsersHeader = page.locator("#main > h2").text_content()
+        if numberUsersHeader:
+            if len(numberUsersHeader.split("-")) == 1: 
+                total_pages = 1 
+            else:
+                numberKudos = numberUsersHeader.split("-")[1].split(" ")
+                total_items = int(numberKudos[3].replace(",", ""))
+                total_pages = math.ceil(total_items / 20) # 20 bookmarks per page
+        else:
+            if progress_q: progress_q.put({"error": "Error reading bookmarks page"})
+            break
+
+        if progress_q: 
+            progress_q.put({"current_page": pageNumber, "total_pages": total_pages})
+            
         work_list = page.locator("li[role='article']")
         count = work_list.count()
         
@@ -321,30 +404,26 @@ def checkBookmarks (username, dataframe : pd.DataFrame, page):
 
                 work_link_locator = work.locator("h4.heading a[href^='/works/']")
                 work_link_locator.wait_for(state="attached", timeout=15000)
+                
+                title = work_link_locator.text_content()
+                if progress_q: progress_q.put({"title": title})
 
                 id = int (work_link_locator.get_attribute("href", timeout=5000)[7:])
                 dataframe.loc[dataframe["fic_id"] == id, "bookmarked"] = True
             except Exception as e:
-                print(f"Error processing work {i+1} on page {pageNumber}: {e}. Waiting and skipping...")
+                if progress_q: progress_q.put({"error": f"Error processing work {i+1} on page {pageNumber}. Skipping..."})
                 time.sleep(30) 
                 continue
-        print(f"page {pageNumber} of bookmarks read")
 
-        # check if has seen all pages 
-        numberUsersHeader = page.locator("#main > h2").text_content()
-        if numberUsersHeader:
-            if len(numberUsersHeader.split("-")) == 1: #only one page to check
+        # Check if we reached the end
+        if numberUsersHeader and len(numberUsersHeader.split("-")) > 1:
+            if int(numberKudos[1].replace(",", "")) >= int(numberKudos[3].replace(",", "")): 
                 break
-            numberKudos = numberUsersHeader.split("-")[1].split(" ")
-        else:
-            print ("error reading page")
-            break
-        
-        if (int (numberKudos[1].replace(",", "")) >= int (numberKudos[3].replace(",", ""))): # reached the end
-            break
 
-        pageNumber +=1
-    print ("finished checking bookmarks")
+        pageNumber += 1
+        
+    if progress_q: progress_q.put({"status": "Finished checking bookmarks"})
+    return dataframe
 
 
 def printWorkInfo(work_id, page, i):

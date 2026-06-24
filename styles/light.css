@@ -1,37 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap');
 
+:root {
+    --bg:        #fffdf9; 
+    --bg2:       #fcf8f2;
+    --text:      #3d352a; 
+    --muted:     #8c7e6b;
+    --accent:    #681504;
+    --accent-lt: #8c2d19;
+    --border:    #dcd1b4;
+    --border-lt: #d4c9a8;
+}
+
 .stApp {
-    background-image: radial-gradient(#e9e1c6 1px, transparent 0) !important;
+    background-image: radial-gradient(var(--border-lt) 1px, transparent 0) !important;
     background-size: 24px 24px !important;
     font-family: 'EB Garamond', serif !important;
 }
 [data-testid="stMainBlockContainer"] {
-    background: #fffdf9 !important;
-    border: 1px solid #dcd1b4 !important;
-    border-top: 5px solid #8c2d19 !important;
+    background: var(--bg) !important;
+    border: 1px solid var(--border) !important;
+    border-top: 5px solid var(--accent-lt) !important;
     border-radius: 4px !important;
-    padding: 50px !important;
+    padding: clamp(15px, 5vw, 50px) !important;
     box-shadow: 0 4px 15px rgba(43, 38, 31, 0.05) !important;
     margin-top: 30px !important;
-    max-width: 900px !important;
+    max-width: 1100px !important;
 }
 [data-testid="stSidebar"] {
-    border-right: 1px solid #dcd1b4 !important;
+    border-right: 1px solid var(--border) !important;
 }
 h1, h2, h3 {
     font-family: 'EB Garamond', serif !important;
-    color: #4a150b !important;
+    color: var(--accent) !important;
     font-weight: 600 !important;
 }
 .serif-body {
     font-size: 1.2rem;
     line-height: 1.6;
-    color: #3d352a;
+    color: var(--text);
 }
 .archive-sub {
     font-family: 'Courier Prime', monospace;
     font-size: 0.85rem;
-    color: #8c7e6b;
+    color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 2px;
     margin-bottom: 20px;
@@ -39,28 +50,28 @@ h1, h2, h3 {
 .flourish {
     text-align: center;
     margin: 25px 0;
-    color: #8c2d19;
+    color: var(--accent-lt);
     font-size: 1.5rem;
     opacity: 0.6;
 }
 div.stButton > button {
-    background-color: #4a150b !important;
-    color: #fcf8f2 !important;
+    background-color: var(--accent) !important;
+    color: var(--bg2) !important;
     font-family: 'Courier Prime', monospace !important;
-    border: 1px solid #4a150b !important;
+    border: 1px solid var(--accent) !important;
     border-radius: 2px !important;
     padding: 10px 24px !important;
     transition: all 0.2s ease !important;
 }
 div.stButton > button:hover {
-    background-color: #fcf8f2 !important;
-    color: #4a150b !important;
-    border: 1px solid #4a150b !important;
+    background-color: var(--bg2) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent) !important;
 }
 [data-testid="stTextInput"] input,
 [data-testid="stTextArea"] textarea,
 [data-testid="stSelectbox"] select {
-    border-color: #dcd1b4 !important;
+    border-color: var(--border) !important;
 }
 div[data-testid="stCheckbox"] label p {
     font-family: 'EB Garamond', serif !important;
