@@ -4,7 +4,7 @@
     --bg:        #fffdf9; 
     --bg2:       #fcf8f2;
     --text:      #3d352a; 
-    --muted:     #8c7e6b;
+    --muted:     #7b6e5c;
     --accent:    #681504;
     --accent-lt: #8c2d19;
     --border:    #dcd1b4;
@@ -76,4 +76,11 @@ div.stButton > button:hover {
 div[data-testid="stCheckbox"] label p {
     font-family: 'EB Garamond', serif !important;
     font-size: 1.1rem !important;
+}
+.fic-title a {
+    color: var(--accent-lt) !important;
+    text-decoration: none;
+}
+.fic-title a:hover {
+    text-decoration: underline;
 }

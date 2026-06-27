@@ -8,7 +8,7 @@ import numpy as np
 
 def preprocess_history_data(dataFrame: pd.DataFrame):
     df = dataFrame.copy()
-    
+
     remove_parenthesis_cols = ['ships', 'tags']
     for c in remove_parenthesis_cols:
         df[c] = df[c].apply(lambda x:[re.sub(r"\([^)]*\)", "", item).strip() for item in x if isinstance(item, str)] if isinstance(x, list) else x)
@@ -25,6 +25,14 @@ def preprocess_history_data(dataFrame: pd.DataFrame):
     word_count_scaler = MinMaxScaler()
     df['word_count_normalized'] = word_count_scaler.fit_transform(df[['word_count']])
 
+    df['last_visited'] = pd.to_datetime(df['last_visited'], errors='coerce')
+
+    # drop rows where last_visited couldn't be parsed
+    unparseable = df['last_visited'].isna().sum()
+    if unparseable > 0:
+        print(f"Warning: {unparseable} rows had unparseable last_visited and will be excluded from recency scoring")
+        df = df.dropna(subset=['last_visited'])
+
     # recency
     most_recent_date_in_history = df['last_visited'].max()
     time_diff_days = (most_recent_date_in_history - df['last_visited']).dt.days
@@ -38,7 +46,7 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
     df = preprocessed_df.copy()
 
     # TF-IDF 
-    tfidf_vectorizer = TfidfVectorizer(stop_words='english', min_df=2, max_df=0.9)
+    tfidf_vectorizer = TfidfVectorizer(stop_words='english', min_df=1, max_df=0.9)
     tfidf_matrix = tfidf_vectorizer.fit_transform(df['combined_text_features'])
 
     # one hot encoding 
@@ -65,8 +73,7 @@ def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, 
     recency_scores = preprocessed_df['recency_score'].values
     bookmarked_status = preprocessed_df['bookmarked'].values
 
-    weights = recency_scores.copy()
-    weights[bookmarked_status] *= bookmark_boost
+    weights = recency_scores + (bookmarked_status * bookmark_boost)
 
     total_weight_sum = np.sum(weights)
     if total_weight_sum == 0:
@@ -120,6 +127,9 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     df_to_score['combined_text_features'] = df_to_score['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
 
     # normalized word count
+    df_to_score['word_count'] = df_to_score['word_count'].clip(
+        upper=word_count_scaler.data_max_[0]
+    )
     df_to_score['word_count_normalized'] = word_count_scaler.transform(df_to_score[['word_count']])
     df_to_score["recency_score"] = 1 
 
@@ -130,8 +140,9 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     unread_ohe_rating_sparse = ohe_rating_encoder.transform(df_to_score[['rating']])
 
     # word count
+    NUMERICAL_WEIGHT = 3.0
     numerical_features_unread = df_to_score[['word_count_normalized', 'recency_score']].values
-    numerical_sparse_unread = csr_matrix(numerical_features_unread) 
+    numerical_sparse_unread = csr_matrix(numerical_features_unread) * NUMERICAL_WEIGHT
 
     # combining everything
     combined_unread_features_sparse = hstack([unread_tfidf_matrix, unread_ohe_rating_sparse, numerical_sparse_unread])

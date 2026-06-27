@@ -66,3 +66,25 @@ def format_unread_fic_tags (number_tags, tag_ship_counts, ship_tag):
     formatted_ship_tag = re.sub(r"\[^]*\)", "", ship_tag).strip()
     formatted_ship_tag = quote_plus(formatted_ship_tag)
     return formatted_tags, formatted_ship_tag
+
+def is_rate_limited(page):
+    return (
+        "Retry later" in page.title() or
+        page.query_selector("div#main p") is not None and
+        "unusual traffic" in (page.query_selector("div#main p").inner_text() or "").lower()
+)
+
+def is_cloudflare_blocked(page):
+    return (
+        "Shields are up" in page.content() or
+        "cf-challenge" in page.content() or
+        page.query_selector("input#challenge-stage") is not None
+    )
+
+def safe_goto(page, url, timeout=30000):
+    try:
+        page.goto(url, wait_until="networkidle", timeout=timeout)
+    except Exception:
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        page.wait_for_load_state("networkidle", timeout=15000)
+    

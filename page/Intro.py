@@ -36,7 +36,7 @@ def intro():
         if uploaded_file is not None:
             try:
                 filename = uploaded_file.name
-                match = re.match(r'(\w+)_history_data\.json', filename)
+                match = re.match(r'(\w+)_history_data(\(\d*\))?\.json', filename)
                 if match:
                     username = match.group(1)
                     if username != "-1":
@@ -50,6 +50,7 @@ def intro():
                 st.success("File uploaded successfully.")
                 
                 if find_read:
+                    st.session_state.logging_in = True
                     st.session_state.current_page = "get_history"
                 else:
                     st.session_state.current_page = "wrapper"
@@ -68,4 +69,5 @@ def intro():
         if st.button("FETCH FROM AO3 →", use_container_width=True):
             st.session_state.df = pd.DataFrame(columns= WORK_DF_COL)
             st.session_state.current_page = "get_history"
+            st.session_state.logging_in = True
             st.rerun()

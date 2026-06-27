@@ -12,15 +12,23 @@ def logIn(worker, user, pwd, status_widget=None):
 
     def _login(page):
         login_url = "https://archiveofourown.org/users/login"
-        page.goto(login_url)
+        safe_goto(page, login_url)
 
+        if is_rate_limited(page):
+            if progress_q: progress_q.put({"status": "Rate limited — waiting 30s..."})
+            time.sleep(30)
+            safe_goto(page, full_url) 
+        
+        if is_cloudflare_blocked(page):
+            if progress_q: progress_q.put({"status": "Cloudflare blocked — try again later :("})
+            return
+                
         page.fill("#user_login", user)
         page.fill("#user_password", pwd)
         page.locator("#new_user > dl > dd.submit.actions > input").click()
        
         error_alert = page.locator(".flash.alert")
         if error_alert.count() > 0 and error_alert.is_visible():
-            # Return tuple: (Success_Boolean, Message_String)
             return False, f"login failed! {error_alert.inner_text()}"
              
         error_flash = page.locator(".flash.error")
@@ -180,11 +188,11 @@ def gettingBookmarks(worker, username, dataFrame):
     
     return holder["result"]
 
-def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, max_number_works=None, progress_q=None):
+def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, get_summary, max_number_works=None, progress_q=None):
     all_processed_rows = []
     stored_num_works = 0
     print(f"Navigating to the first page: {base_url_full_query}1")
-    page.goto(base_url_full_query + "1")
+    safe_goto(page, base_url_full_query + "1")
     page.wait_for_selector("h2.heading")
 
     last_page = get_number_of_pages_from_pagination(page, pagination_selector)
@@ -196,7 +204,7 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
         if progress_q:
             progress_q.put({"current_page": p, "total_pages": last_page, "valid_works": stored_num_works})
         current_page_url = base_url_full_query + str(p)
-        page.goto(current_page_url)
+        safe_goto(page, current_page_url)
         try:
             page.wait_for_selector("h2.heading")
 
@@ -218,10 +226,12 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
 
         print(f"processing {work_count_on_page} works on page {p}")
         rows_on_page = []
+        found_repeat_on_page = False
+
         for i in range(work_count_on_page):
             try:
                 work = work_list.nth(i)
-                processed_work = processWork(work, is_processing_history)
+                processed_work = processWork(work, is_processing_history, get_summary)
 
                 if processed_work == []:
                     continue
@@ -229,11 +239,10 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
                 if progress_q:
                     progress_q.put({"title": processed_work[1]})
 
-                if (history_df['fic_id'] == processed_work[0]).any():
+                if (history_df['fic_id'] == processed_work[0]).any(): # if is duplicate
                     if is_processing_history:
-                        print (f"-- stopping early! at work {i+1} on page {p}")
-                        keepGoing = False
-                        break # stop early if there's already saved history
+                        found_repeat_on_page = True
+                        continue
                     else:
                         continue # logic for unread fics: ignore already saved works
                 
@@ -250,15 +259,24 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
             break
         all_processed_rows.append(pd.DataFrame(rows_on_page, columns=WORK_DF_COL))
         
+        if is_processing_history and found_repeat_on_page:
+            all_new_on_page = len(rows_on_page)
+            if all_new_on_page == 0:
+                print(f"-- stopping early! entire page {p} was already in history")
+                break
+            else:
+                print(f"-- found {all_new_on_page} new works on page {p} alongside duplicates, continuing...")
+                
         if max_number_works is not None and stored_num_works >= max_number_works:
             break
+
     if all_processed_rows:
         return pd.concat(all_processed_rows, ignore_index=True)
     else:
         return pd.DataFrame(columns=WORK_DF_COL)
 
 
-def processWork(work, is_history : bool):
+def processWork(work, is_history : bool, get_summary : bool):
     if "deleted" in work.get_attribute("class"):
         print ("- deleted work found, skipping...")
         return []
@@ -316,17 +334,27 @@ def processWork(work, is_history : bool):
             return []
     else:
         parsed_date = None
+    
+    if get_summary:
+        all_summary_blocks = work.locator("blockquote.userstuff").all()
+        summary_parts = [block.inner_text() for block in all_summary_blocks]
+        summary = "".join(summary_parts).strip()
+    else:  
+        summmary = None
 
     bookmark = False
-    return [id, title, author, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark]
+    return [id, title, author, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark, summary]
 
 def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=None):
     max_number_fics = 200
-    if progress_q: progress_q.put({"status": f"Will now fetch {max_number_fics} unread fanfics for scoring."})
+    if progress_q:
+        progress_q.put({"max_fics": max_number_fics})
+        progress_q.put({"status": f"Will now fetch {max_number_fics} unread fanfics for scoring."})
     
     base_search_url = 'https://archiveofourown.org/works/search?'
     number_tags = 5
 
+    raw_tags = tag_ship_counts['tag'].head(number_tags).tolist()
     formatted_tags, formatted_ship_tag = format_unread_fic_tags(number_tags, tag_ship_counts, ship_tag)
 
     unread_df = pd.DataFrame(columns=WORK_DF_COL)
@@ -340,7 +368,11 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
         current_url_query += "&work_search%5Bsort_column%5D=kudos_count&commit=Search&page="
         full_base_url = base_search_url + current_url_query
 
-        if progress_q: progress_q.put({"status": f"Searching with {number_tags} tags..."})
+        if progress_q:
+            progress_q.put({
+                "status": f"Searching with {number_tags} tags...",
+                "current_tags": raw_tags[:number_tags]
+            })
 
         number_works_to_read = max_number_fics - len(unread_df)
 
@@ -351,8 +383,9 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
             work_list_selector="#main > ol.work.index.group",
             is_processing_history=False, 
             history_df=pd.concat([history_df, unread_df]),
+            get_summary=True,
             max_number_works=100 if number_works_to_read > 100 else number_works_to_read,
-            progress_q=progress_q # We pass the queue deeper!
+            progress_q=progress_q,
         )
         newly_scraped_fics.drop_duplicates(subset=['fic_id'], inplace=True)
         existing_fic_ids = unread_df['fic_id'].unique()
@@ -360,7 +393,11 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
 
         unread_df = pd.concat([unread_df, newly_scraped_fics], ignore_index=True)
         
-        if progress_q: progress_q.put({"valid_works": len(unread_df)})
+        if progress_q:
+            progress_q.put({
+                "valid_works": len(unread_df),
+                "status": f"Found {len(unread_df)} fics so far (tried {5 - number_tags + 1} tag sets)..."
+            })
         number_tags -= 1 
 
     if progress_q: progress_q.put({"status": f"Finished getting unread fics, with {len(unread_df)} fics"})
@@ -376,7 +413,16 @@ def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
     
     while True:
         url = base_url + str(pageNumber)
-        page.goto(url)
+        safe_goto(page, url)
+
+        if is_rate_limited(page):
+            if progress_q: progress_q.put({"status": "Rate limited — waiting 30s..."})
+            time.sleep(30)
+            safe_goto(page, full_url) 
+
+        if is_cloudflare_blocked(page):
+            if progress_q: progress_q.put({"status": "Cloudflare blocked — try again later :("})
+            return
         
         numberUsersHeader = page.locator("#main > h2").text_content()
         if numberUsersHeader:
@@ -426,12 +472,53 @@ def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
     return dataframe
 
 
+def fetch_work_summaries(page, work_ids, progress_q=None):
+    base_url = "https://archiveofourown.org/works/"
+    results = {}
+
+    for i, work_id in enumerate(work_ids):
+        full_url = f"{base_url}{work_id}"
+        if progress_q:
+            progress_q.put({"fetch_progress": i, "fetch_total": len(work_ids)})
+
+        try:
+            safe_goto(page, full_url)
+
+            if is_rate_limited(page):
+                if progress_q: progress_q.put({"status": "Rate limited — waiting 30s..."})
+                time.sleep(30)
+                safe_goto(page, full_url)
+            
+            if is_cloudflare_blocked(page):
+                if progress_q: progress_q.put({"status": "Cloudflare blocked — try again later :("})
+                return
+                
+            # private/restricted work
+            if page.url == "https://archiveofourown.org/users/login?restricted=true":
+                results[work_id] = None  # use df_scored fallback
+                continue
+
+            if check_for_nsfw_warning(page):
+                title, author, summary = get_info_nsfw_work(page)
+            else:
+                title, author, summary = get_info_work(page)
+
+            results[work_id] = {"title": title, "author": author, "summary": summary}
+
+        except Exception as e:
+            results[work_id] = {"error": str(e)}
+
+    if progress_q:
+        progress_q.put({"fetch_progress": len(work_ids), "fetch_total": len(work_ids)})
+
+    return results
+
 def printWorkInfo(work_id, page, i):
     base_url = "https://archiveofourown.org/works/"
     full_url = f"{base_url}{work_id}"
     print("\n------------------------")
     print(f"Suggestion {i}\n")
-    page.goto(full_url)
+    safe_goto(page, full_url)
 
     if page.url == "https://archiveofourown.org/users/login?restricted=true": # work is only available for logged in users
         print ("Work is private, details hidden! Check it out:")

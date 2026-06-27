@@ -57,7 +57,7 @@ h1, h2, h3 {
 }
 div.stButton > button {
     background-color: var(--accent-lt) !important;
-    color: #f0e6d3 !important; /* Retained unique button text color for readability */
+    color: #f0e6d3 !important;
     font-family: 'Courier Prime', monospace !important;
     border: 1px solid var(--accent-lt) !important;
     border-radius: 2px !important;
@@ -77,4 +77,11 @@ div.stButton > button:hover {
 div[data-testid="stCheckbox"] label p {
     font-family: 'EB Garamond', serif !important;
     font-size: 1.1rem !important;
+}
+.fic-title a {
+    color: var(--accent-lt) !important;
+    text-decoration: none;
+}
+.fic-title a:hover {
+    text-decoration: underline;
 }

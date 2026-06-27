@@ -22,8 +22,7 @@ def wrapper():
     st.markdown(f'<div class="archive-sub">AO3 Stats // {current_year} in Review</div>', unsafe_allow_html=True)
     st.title(f"The {current_year} Ledger")
     st.markdown(
-        '<p class="serif-body">A record of your reading history on the Archive this year — '
-        "your top fandoms, your favorite authors, and your milestones. Turn the pages below.</p>"
+        '<p class="serif-body">A record of your reading history on the Archive this year. Turn the pages below.</p>'
         '<div class="flourish">𓆝 𓆟 𓆞 𓆝 𓆟</div>',
         unsafe_allow_html=True,
     )
@@ -32,14 +31,14 @@ def wrapper():
 
     if "word_count" in fdf.columns:
         def assign_bucket(wc):
-            if pd.isna(wc) or wc < 10_000:  return "Short"
-            if wc < 50_000:                 return "Medium"
-            if wc < 100_000:                return "Long"
+            if pd.isna(wc) or wc < 10000:  return "Short"
+            if wc < 50000:                 return "Medium"
+            if wc < 100000:                return "Long"
             return "Epic"
 
         fdf["bucket"] = fdf["word_count"].apply(assign_bucket)
         try:
-            word_heavyweight = fdf.groupby("bucket")["word_count"].sum().idxmax()
+            word_heavyweight = fdf.groupby("bucket")["word_count"].count().idxmax()
         except ValueError:
             word_heavyweight = "Short"
     else:
@@ -172,9 +171,9 @@ body {{
 }}
 
 /* -- TYPOGRAPHY & UTILITIES -- */
-.mono-label {{ font-family: 'Courier Prime', monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }}
+.mono-label {{ font-family: 'Courier Prime', monospace; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }}
 .text-italic {{ font-style: italic; }}
-.text-muted {{ color: var(--muted); }}
+.text-muted {{ color: var(--muted); font-weight: 500;}}
 .text-accent {{ color: var(--accent-lt); font-weight: 600; }}
 .text-accent-dark {{ color: var(--accent); font-weight: 600; }}
 .text-center {{ text-align: center; }}

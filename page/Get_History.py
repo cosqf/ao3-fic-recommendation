@@ -1,5 +1,5 @@
 import streamlit as st 
-from web import logIn, gettingHistory, gettingBookmarks, checkBookmarks, scrap_unread_fics, printWorkInfo
+from web import logIn, gettingHistory, gettingBookmarks, checkBookmarks, printWorkInfo
 
 def get_history():
     st.markdown('<div class="archive-sub">Reading AO3 // Fetching Ledger</div>', unsafe_allow_html=True)
@@ -7,9 +7,8 @@ def get_history():
 
     from main import get_worker
     worker = get_worker()
-    logging_in = st.session_state.username == ""
-
-    # logging in
+    logging_in = st.session_state.logging_in
+    
     if logging_in:
         st.markdown("""
             <p class="serif-body">
@@ -31,7 +30,10 @@ def get_history():
             success = logIn(worker, username, password, status)
             if success:
                 st.session_state.username = username
-                # Reset the scraping flag on a fresh login
+                st.session_state.logging_in = False
+                st.session_state.logged_in = True
+                
+                # reset the scraping flag on a fresh login
                 st.session_state.scrape_complete = False 
                 status.success("Login successful!")
                 status.empty()

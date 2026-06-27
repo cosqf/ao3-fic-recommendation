@@ -104,8 +104,15 @@ def stats():
 
     st.title("Archive Statistics")
     st.markdown('<p class="archive-sub">Narrow down the graphs using the filters on the sidebar.</p>', unsafe_allow_html=True)
-    st.markdown("Analysing your reading history.")
-    
+
+    h_col1, h_spacer1, h_spacer2, h_col2 = st.columns(4)
+    with h_col1:
+        st.markdown("Analysing your reading history.")
+    with h_col2:
+        if st.button("GET RECOMMENDATIONS"):
+            st.session_state.current_page = "rec"
+            st.rerun()
+
     fdf = st.session_state.filtered_df
 
     if fdf.empty:
