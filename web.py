@@ -15,12 +15,10 @@ def logIn(worker, user, pwd, status_widget=None):
         safe_goto(page, login_url)
 
         if is_rate_limited(page):
-            if progress_q: progress_q.put({"status": "Rate limited — waiting 30s..."})
             time.sleep(30)
             safe_goto(page, full_url) 
         
         if is_cloudflare_blocked(page):
-            if progress_q: progress_q.put({"status": "Cloudflare blocked — try again later :("})
             return
                 
         page.fill("#user_login", user)
@@ -188,7 +186,7 @@ def gettingBookmarks(worker, username, dataFrame):
     
     return holder["result"]
 
-def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, get_summary, max_number_works=None, progress_q=None):
+def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, get_summary=False, max_number_works=None, progress_q=None):
     all_processed_rows = []
     stored_num_works = 0
     print(f"Navigating to the first page: {base_url_full_query}1")
@@ -340,7 +338,7 @@ def processWork(work, is_history : bool, get_summary : bool):
         summary_parts = [block.inner_text() for block in all_summary_blocks]
         summary = "".join(summary_parts).strip()
     else:  
-        summmary = None
+        summary = None
 
     bookmark = False
     return [id, title, author, rating, orientations, fandoms, ships, tags, words, parsed_date, bookmark, summary]
