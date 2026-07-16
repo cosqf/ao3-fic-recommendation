@@ -67,20 +67,22 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 
 
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
-    bookmark_boost: float = 5.0 
+    bookmark_boost: float = 10.0 
 
-    all_history_fic_vectors = combined_sparse_features
-    recency_scores = preprocessed_df['recency_score'].values
-    bookmarked_status = preprocessed_df['bookmarked'].values
+    all_history_fic_vectors = csr_matrix(combined_sparse_features)
+    recency_scores = preprocessed_df['recency_score'].values.astype(np.float64)
+    bookmarked_status = preprocessed_df['bookmarked'].values.astype(np.float64)
+    bookmarked_status = pd.array(bookmarked_status, dtype="boolean").to_numpy(dtype=float, na_value=0.0)
 
-    weights = recency_scores + (bookmarked_status * bookmark_boost)
+    weights = (recency_scores + (bookmarked_status * bookmark_boost)).astype(float)
 
     total_weight_sum = np.sum(weights)
     if total_weight_sum == 0:
         print("Warning: Sum of weights is zero. User profile will be a zero vector.")
         return pd.Series(0.0, index=feature_names)
 
-    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis]) 
+    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis])
+    weighted_vectors = csr_matrix(weighted_vectors)
 
     summed_sparse_vector = weighted_vectors.sum(axis=0)
     user_profile_vector_sparse = csr_matrix(summed_sparse_vector) / total_weight_sum
@@ -127,9 +129,7 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     df_to_score['combined_text_features'] = df_to_score['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
 
     # normalized word count
-    df_to_score['word_count'] = df_to_score['word_count'].clip(
-        upper=word_count_scaler.data_max_[0]
-    )
+    df_to_score['word_count'] = df_to_score['word_count'].fillna(0).clip(lower=0, upper=word_count_scaler.data_max_[0])
     df_to_score['word_count_normalized'] = word_count_scaler.transform(df_to_score[['word_count']])
     df_to_score["recency_score"] = 1 
 
@@ -137,12 +137,13 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['combined_text_features'])
 
     # One-Hot Encoding
+    known_ratings = ohe_rating_encoder.categories_[0]
+    df_to_score['rating'] = df_to_score['rating'].where(df_to_score['rating'].isin(known_ratings), other=known_ratings[0])
     unread_ohe_rating_sparse = ohe_rating_encoder.transform(df_to_score[['rating']])
 
     # word count
-    NUMERICAL_WEIGHT = 3.0
     numerical_features_unread = df_to_score[['word_count_normalized', 'recency_score']].values
-    numerical_sparse_unread = csr_matrix(numerical_features_unread) * NUMERICAL_WEIGHT
+    numerical_sparse_unread = csr_matrix(numerical_features_unread)
 
     # combining everything
     combined_unread_features_sparse = hstack([unread_tfidf_matrix, unread_ohe_rating_sparse, numerical_sparse_unread])

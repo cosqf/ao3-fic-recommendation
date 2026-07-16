@@ -5,16 +5,13 @@ A web scrapper that processes your Archive of Our Own (AO3) reading history, pro
 
 ## Features
 
+* **Fetches your AO3 history:** Obtain a JSON file with all your works read.
 * **Reading History Analysis:** Generates statistics from your AO3 reading history.
 * **Personalized Fanfic Recommendations:** Suggests new, unread fanfics based on your historical reading patterns.
 
 ## How it Works
 
-The project constructs a user profile from your AO3 reading history. This profile incorporates features derived from:
-
-* **Content Descriptors:** Descriptors such as fandoms, ships and tags are converted into numerical vectors using **TF-IDF**.
-* **Numerical Attributes:** Fanfic word counts are normalized using **MinMaxScaler**.
-* **Engagement Metrics:** Recency of historical reading activity and bookmark status are applied as weights. Bookmarked works and works read more recently contribute a higher weight to the user profile.
+The project constructs a user profile from your AO3 reading history.
 
 For generating recommendations based on a user-provided ship:
 1.  New, unread fanfics relevant to the specified ship are collected from AO3.
@@ -23,17 +20,27 @@ For generating recommendations based on a user-provided ship:
 
 ## How to Run
 
-### Using Google Collab
-Access and run the project online via this [link](https://colab.research.google.com/drive/1fIdHS0ceLlHEKqSwpPvVoWh7-quhbq3x).
-
 ### Locally
 1.  Clone the repository: `git clone https://github.com/cosqf/ao3-fic-recommendation`
 2.  Set up a virtual environment (recommended): `python -m venv venv`
     * On Windows: `.\venv\Scripts\activate`
     * On macOS/Linux: `source venv/bin/activate`
-4.  Install dependencies:  
-    `pip install -r requirements.txt`  
-    `playwright install`
-5.  Run the application:
-    `python main.py`
 
+3. Install dependencies:
+   `pip install -r requirements.txt`
+
+4. Install browser binaries:
+   `playwright install chromium`
+
+   **Linux only:** if you get missing dependency errors, run: 
+    >`playwright install-deps chromium`
+
+   **Windows only:** if `playwright` is not recognized after install,
+   > try `python -m playwright install chromium`
+
+5. Run the application:
+   `streamlit run main.py`
+
+### Known issues
+
+Cloudflare may flag the activity as bot-like, and issue a captcha. You will notice that happening if the browser gets a timeout. If that happens, run instead with: `streamlit run main.py -- --no-headless`, and do the captcha.

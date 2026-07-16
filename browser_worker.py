@@ -5,8 +5,9 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 
 class PlaywrightWorker(threading.Thread):
-    def __init__(self):
+    def __init__(self, headless = True):
         super().__init__(daemon=True)
+        self.headless = headless
         self._queue = queue.Queue()
         self._ready = threading.Event()
         self.context = None
@@ -16,7 +17,7 @@ class PlaywrightWorker(threading.Thread):
 
     def run(self):
         with Stealth().use_sync(sync_playwright()) as pw:
-            self.context = pw.chromium.launch(headless=True).new_context(
+            self.context = pw.chromium.launch(headless=self.headless).new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36")
             self.page = self.context.new_page()
             self._ready.set()
