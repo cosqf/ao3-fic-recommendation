@@ -2,6 +2,7 @@ from playwright.sync_api import Playwright
 import re
 from urllib.parse import quote_plus
 import pandas as pd
+from itertools import product
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -51,7 +52,7 @@ def extract_and_parse_last_visited(full_text):
         last_visited_str = f"{day} {month} {year}"
         try:
             parsed_date = pd.to_datetime(last_visited_str, format="%d %b %Y")
-            return parsed_date
+            return parsed_date.isoformat()
         except ValueError:
             print(f"Warning: Could not parse date '{last_visited_str}' from text: {full_text}")
             return None 
@@ -87,4 +88,3 @@ def safe_goto(page, url, timeout=30000):
     except Exception:
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_load_state("networkidle", timeout=15000)
-    

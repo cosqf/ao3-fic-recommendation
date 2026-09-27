@@ -5,6 +5,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from scipy.sparse import hstack, csr_matrix
 import re
 import numpy as np
+from itertools import product
 
 def preprocess_history_data(dataFrame: pd.DataFrame):
     df = dataFrame.copy()
@@ -92,26 +93,6 @@ def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, 
     return user_profile_vector
 
 
-def create_user_profile_from_history(history_df: pd.DataFrame):
-    ohe_rating_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True)
-    ohe_rating_encoder.fit(history_df[['rating']])
-
-    preprocessed_df, wc_scaler, most_recent = preprocess_history_data(history_df)
-
-    combined_features_sparse, tfidf_vec, feature_names_list = vectorize_all_features(preprocessed_df, ohe_rating_encoder)
-
-    user_profile = build_user_profile(combined_features_sparse, preprocessed_df, feature_names_list)
-    user_profile = user_profile.fillna(0)
-
-    model_components = {
-        'tfidf_vectorizer': tfidf_vec,
-        'ohe_rating_encoder': ohe_rating_encoder,
-        'word_count_scaler': wc_scaler,
-        'recency_base': most_recent,
-        'feature_names': feature_names_list
-    }
-    return user_profile, model_components
-
 
 def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model_components: dict):
     df_to_score = unread_df.copy() 
@@ -160,3 +141,49 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     df_to_score = df_to_score.sort_values(by='recommendation_score', ascending=False)
 
     return df_to_score
+
+
+def generate_common_ship_tags(dataFrame, ship_tag = None, tag_filter = None):
+    tag_ship_pairs = []
+    for _, row in dataFrame.iterrows():
+        tags = row["tags"]
+        ships = row["ships"]
+        if not isinstance(tags, list):
+            tags = [tags] if pd.notna(tags) else []
+        if not isinstance(ships, list):
+            ships = [ships] if pd.notna(ships) else []
+
+        if tags and ships:
+            tag_ship_pairs.extend(list(product(tags, ships)))
+
+    pairs = pd.DataFrame(tag_ship_pairs, columns=["tag", "ship"])
+
+    if ship_tag is not None:
+        pairs = pairs[pairs['ship'] == ship_tag] 
+
+    if tag_filter is not None:
+        pairs = pairs[pairs['tag'] == tag_filter] 
+
+    tag_ship_counts = pairs.value_counts().reset_index(name="count")
+    return tag_ship_counts
+
+
+def create_user_profile_from_history(history_df: pd.DataFrame):
+    ohe_rating_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True)
+    ohe_rating_encoder.fit(history_df[['rating']])
+
+    preprocessed_df, wc_scaler, most_recent = preprocess_history_data(history_df)
+
+    combined_features_sparse, tfidf_vec, feature_names_list = vectorize_all_features(preprocessed_df, ohe_rating_encoder)
+
+    user_profile = build_user_profile(combined_features_sparse, preprocessed_df, feature_names_list)
+    user_profile = user_profile.fillna(0)
+
+    model_components = {
+        'tfidf_vectorizer': tfidf_vec,
+        'ohe_rating_encoder': ohe_rating_encoder,
+        'word_count_scaler': wc_scaler,
+        'recency_base': most_recent,
+        'feature_names': feature_names_list
+    }
+    return user_profile, model_components

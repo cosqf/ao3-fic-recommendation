@@ -1,0 +1,6 @@
+streamlit
+scikit-learn
+counter
+product
+pandas
+requests

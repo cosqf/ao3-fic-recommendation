@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import datetime
 import pandas as pd
 import streamlit as st
+from config import FRONTEND_DIR
 
 def wrapper():
     df = st.session_state.df.copy()
@@ -29,26 +30,19 @@ def wrapper():
 
     # ── STATS ─────────────────────────────────────────────────────────────────
 
-    if "word_count" in fdf.columns:
-        def assign_bucket(wc):
-            if pd.isna(wc) or wc < 10000:  return "Short"
-            if wc < 50000:                 return "Medium"
-            if wc < 100000:                return "Long"
-            return "Epic"
+    has_wc = "word_count" in fdf.columns and not fdf["word_count"].dropna().empty
+    median_words = fdf["word_count"].median() if has_wc else 0
+    total_words = int(fdf["word_count"].sum()) if has_wc else 0
+    total_works = len(fdf)
 
-        fdf["bucket"] = fdf["word_count"].apply(assign_bucket)
-        try:
-            word_heavyweight = fdf.groupby("bucket")["word_count"].count().idxmax()
-        except ValueError:
-            word_heavyweight = "Short"
+    if median_words >= 100000:
+        length_title = "Reader of Epics"
+    elif median_words >= 50000:
+        length_title = "Reader of Long Stories"
+    elif median_words >= 10000:
+        length_title = "Reader of Mid-Length Stories"
     else:
-        word_heavyweight = "Short"
-
-    length_title = {
-        "Epic":   "Reader of Epics",
-        "Long":   "Reader of Long Stories",
-        "Medium": "Reader of Mid-Length Stories",
-    }.get(word_heavyweight, "Reader of Short Stories")
+        length_title = "Reader of Short Stories"
 
     top_rating = (
         fdf["rating"].mode()[0]
@@ -60,10 +54,6 @@ def wrapper():
         "Mature":                "Reader of Mature Fiction",
         "Teen And Up Audiences": "Reader of Teen Fiction",
     }.get(top_rating, "Reader of General Fiction")
-
-    median_words = fdf["word_count"].median() if "word_count" in fdf.columns else 0
-    total_words  = int(fdf["word_count"].sum()) if "word_count" in fdf.columns else 0
-    total_works  = len(fdf)
 
     ASOIAF_SERIES = 1_770_000
     ASOIAF_BOOK   = 354_000
@@ -147,15 +137,13 @@ def wrapper():
   <div class="w-full max-w-sm mb-lg">{migration_rows_html}</div>
   <div class="ruled-bottom"></div>"""
 
-    # Dialed down frame height slightly since internal buttons are removed
+    # dialed down frame height slightly since internal buttons are removed
     extra_rows   = 0 if single_fandom_mode else max(0, len(migration) - 4)
     frame_height = 610 + extra_rows * 40
 
     theme = st.context.theme.type
-    with open(f"styles/{theme}.css", "r") as f:
+    with open(f"{FRONTEND_DIR}/styles/{theme}.css", "r") as f:
         css = f.read()
-
-    # ── HTML ──────────────────────────────────────────────────────────────────
 
     html_content = f"""
 <style>

@@ -1,0 +1,6 @@
+pandas
+fastapi
+uvicorn
+camoufox
+pydantic
+bs4

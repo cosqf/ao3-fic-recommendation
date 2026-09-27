@@ -44,3 +44,8 @@ For generating recommendations based on a user-provided ship:
 ### Known issues
 
 Cloudflare may flag the activity as bot-like, and issue a captcha. You will notice that happening if the browser gets a timeout. If that happens, run instead with: `streamlit run main.py -- --no-headless`, and do the captcha.
+
+
+uvicorn backend.main:app --reload
+
+python -m streamlit run frontend/app.py 
