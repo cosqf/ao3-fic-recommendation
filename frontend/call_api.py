@@ -4,8 +4,20 @@ from config import API_PORT
 import pandas as pd 
 import datetime
 import math
+import streamlit as st 
 
 BACKEND_URL = st.secrets.get("BACKEND_URL", f"http://localhost:{API_PORT}")
+
+@st.cache_data(ttl=300)
+def wakeup_backend():
+    try:
+        print ("HEALTH")
+        response = requests.get(f"{BACKEND_URL}/health", timeout=3)
+        print (response)
+    except Exception as e:
+        print ("health failed", e)
+        pass
+
 
 def stream_backend(endpoint: str, payload: dict):
     body = json.dumps(payload, default=_json_default)

@@ -55,6 +55,9 @@ def render_login_and_scrape():
         "password": password,
         "df": st.session_state.df.to_dict(orient="records"),
     }
+
+    starting_later = True
+    starting_bookmarks = True
         
     for event_type, message, data in stream_backend("scrape", payload):
  
@@ -75,8 +78,8 @@ def render_login_and_scrape():
             st.session_state.logged_in = True
  
             with st.container(border=True):
-                title = "Compiling Ledger..."
-                st.markdown(f'<div class="archive-sub" style="margin-bottom: 10px;">{title}</div>', unsafe_allow_html=True)
+                main_title_placeholder = st.empty()
+                main_title_placeholder.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Compiling Ledger...</div>', unsafe_allow_html=True)
                 progress_bar = st.progress(0)
                 st.write("")
                 spacer_left, col1, col2, spacer_right = st.columns([1.7, 1, 1, 1.7])
@@ -108,13 +111,45 @@ def render_login_and_scrape():
 
         elif event_type == "HISTORY_DONE":
             progress_bar.progress(1.0)
+            st.balloons()
             title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>History Done!</b></p>", unsafe_allow_html=True)
             
-            title = "Cross-referencing Bookmarks..."
-            progress_bar.progress(0)
-            bookmarks_tagged = 0
+            
+ 
+        elif event_type == "MARKED_LATER_PROGRESS" and data:
+            if starting_later:
+                main_title_placeholder.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Removing unread from the pile...</div>', unsafe_allow_html=True)
+                progress_bar.progress(0)
+                starting_later = False 
+            
+            if "total_pages" in data and "current_page" in data:
+                pct = min(1.0, data["current_page"] / data["total_pages"])
+                progress_bar.progress(pct)
+                page_metric.metric("Page Progress", f"{data['current_page']} / {data['total_pages']}")
+            if "valid_works" in data:
+                works_metric.metric("To read later", str(data["valid_works"]))
+            if "title" in data:
+                display_title = data["title"][:55] + "..." if len(data["title"]) > 55 else data["title"]
+                title_status.markdown(f"""
+                    <div style='text-align: center; line-height: 1.4;'>
+                        <span style='color: gray; font-size: 0.9em;'>Currently Reading</span><br>
+                        <span style='font-size: 1.1em;'><i>{display_title}</i></span>
+                        <p></p>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        elif event_type == "MARKED_LATER_DONE":
+            progress_bar.progress(1.0)
+            st.balloons()
+            title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Removed Marked for Later!</b></p>", unsafe_allow_html=True)
  
         elif event_type == "BOOKMARK_PROGRESS" and data:
+            if starting_bookmarks:
+                bookmarks_tagged = 0
+                main_title_placeholder.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Cross-referencing bookmarks...</div>', unsafe_allow_html=True)
+                progress_bar.progress(0)
+                starting_bookmarks = False 
+
             if "total_pages" in data and "current_page" in data:
                 tot = data["total_pages"] if isinstance(data["total_pages"], int) else 1
                 cur = data["current_page"]
@@ -124,7 +159,7 @@ def render_login_and_scrape():
                 
             if "title" in data:
                 bookmarks_tagged += 1
-                works_metric.metric("Checked", str(bookmarks_tagged))
+                works_metric.metric("Bookmarks checked", str(bookmarks_tagged))
                 display_title = data['title'][:55] + "..." if len(data['title']) > 55 else data['title']
                 
                 title_html = f"""
@@ -138,6 +173,7 @@ def render_login_and_scrape():
 
         elif event_type == "BOOKMARK_DONE":
             progress_bar.progress(1.0)
+            st.balloons()
             title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Bookmarks Synchronized!</b></p>", unsafe_allow_html=True)
 
         elif event_type == "ERROR":

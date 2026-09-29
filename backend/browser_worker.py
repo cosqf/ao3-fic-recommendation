@@ -15,7 +15,11 @@ class PlaywrightWorker(threading.Thread):
 
     def run(self):
         self.context = Camoufox(headless=self.headless).start().new_context()
-        self.page = self.context.new_page()
+        try:
+            self.page = self.context.new_page()
+        except Exception as e:
+            print (f"Failed to load new page: {e}")
+            return
         self._ready.set()
 
         while True:

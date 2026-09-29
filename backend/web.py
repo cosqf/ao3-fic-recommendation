@@ -2,6 +2,7 @@ import time
 import queue
 import threading
 import math
+import base64
 
 import pandas as pd
 
@@ -10,7 +11,7 @@ from backend.recommendation import *
 
 from bs4 import BeautifulSoup
 from config import WORK_DF_COL
-
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 def make_event(event_type, message="", data=None):
     return {"type": event_type, "message": message, "data": data}
@@ -22,7 +23,7 @@ def run_scrape_pipeline(worker, username, password, initial_df, ship=None):
     try:
         success, message = logIn(worker, username, password)
     except Exception as e:
-        yield make_event("ERROR", message=f"unexpected error during login: {e}")
+        yield make_event("ERROR", message=f"Unexpected error during login: {e}")
         return
 
     if not success:
@@ -46,6 +47,19 @@ def run_scrape_pipeline(worker, username, password, initial_df, ship=None):
             yield make_event(
                 "ERROR",
                 message=f"unexpected error while scraping history: {e}",
+                data=history_df.to_dict(orient="records"),
+            )
+        try:
+            for event in removingMarkedLater(worker, username, history_df):
+                yield event
+                if event["type"] == "MARKED_LATER_DONE":
+                    final_records = event["data"]
+                elif event["type"] == "ERROR":
+                    return
+        except Exception as e:
+            yield make_event(
+                "ERROR",
+                message=f"unexpected error while reading marked for later: {e}",
                 data=history_df.to_dict(orient="records"),
             )
 
@@ -98,6 +112,9 @@ def logIn(worker, user, pwd):
         try:
             page.wait_for_selector(result_selector, timeout=30000)
         except PlaywrightTimeoutError:
+            screenshot_b64 = base64.b64encode(page.screenshot()).decode("utf-8")
+            print(f"Timeout! URL: {page.url}")
+            print(f"Screenshot (base64, {len(screenshot_b64)} chars): {screenshot_b64}")
             return False, "Login timed out waiting for a response"
  
         error_alert = page.locator(".flash.alert")
@@ -115,7 +132,9 @@ def logIn(worker, user, pwd):
 
     try:
         success, message = worker.execute(_login)
+        print("Logged in") if success else print("Not logged in")
     except Exception as e:
+        print(f"logIn failed: {e!r}")
         return False, f"error during login: {e}"
 
     return success, message
@@ -176,7 +195,6 @@ def gettingHistory(worker, username, old_df):
 def gettingBookmarks(worker, username, dataFrame):
     progress_q = queue.Queue()
     
-    
     def _bookmark_job(page):
         return checkBookmarks(username, dataFrame, page, progress_q=progress_q)
  
@@ -217,6 +235,58 @@ def gettingBookmarks(worker, username, dataFrame):
         message="bookmark scraping complete.",
         data=new_df.to_dict(orient="records"),
     )
+
+def removingMarkedLater(worker, username, old_df):
+    link_base = f"https://archiveofourown.org/users/{username}/readings?show=to-read&page="
+    progress_q = queue.Queue()
+
+    def _scrape_job(page):
+        return scrape_works(
+            page, link_base,
+            pagination_selector=".pagination.actions.pagy",
+            work_list_selector="#main > ol.reading.work.index.group",
+            is_processing_history=True,
+            history_df=pd.DataFrame(columns= WORK_DF_COL),
+            progress_q=progress_q,
+        )
+
+    holder = {}
+    done = threading.Event()
+    worker._queue.put((_scrape_job, holder, done))
+
+    while not done.wait(timeout=0.1):
+        while not progress_q.empty():
+            yield make_event("MARKED_LATER_PROGRESS", data=progress_q.get())
+
+    while not progress_q.empty():
+        yield make_event("MARKED_LATER_PROGRESS", data=progress_q.get())
+
+    if holder.get("error"):
+        partial_records = None
+        partial_result = holder.get("partial_result")
+        if partial_result is not None:
+            try:
+                partial_df = old_df[~old_df["fic_id"].isin(partial_result["fic_id"])]
+                partial_df.dropna(subset=["fic_id"], inplace=True)
+                partial_records = partial_df.to_dict(orient="records")
+            except Exception:
+                partial_records = None
+ 
+        yield make_event(
+            "ERROR",
+            message=f"error during scraping: {holder['error']}",
+            data=partial_records,
+        )
+        return
+
+    markedLater = holder["result"]
+    new_df = old_df[~old_df["fic_id"].isin(markedLater["fic_id"])]
+    new_df.dropna(subset=["fic_id"], inplace=True)
+
+    yield make_event(
+        "MARKED_LATER_DONE",
+        message="removing marked for later complete.",
+        data=new_df.to_dict(orient="records"),)
 
 
 def fetchingUnreadWorks(worker, username, password, ship, history_records):

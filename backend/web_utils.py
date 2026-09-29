@@ -2,7 +2,6 @@ from playwright.sync_api import Playwright
 import re
 from urllib.parse import quote_plus
 import pandas as pd
-from itertools import product
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"

@@ -1,6 +1,6 @@
 import streamlit as st
 import sys
-import call_api
+from call_api import *
 from page.Intro import intro
 from page.Get_History import get_history
 from page.Stats import stats
@@ -21,8 +21,10 @@ def main():
     # theme
     theme = st.context.theme.type          # "light" or "dark"
     print (FRONTEND_DIR)
-    with open(f"{FRONTEND_DIR}/styles/{theme}.css", "r") as f:
+    with open(FRONTEND_DIR / "styles" / f"{theme}.css", "r") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+    wakeup_backend()
 
     # routing
     print (f"- {st.session_state.current_page}")

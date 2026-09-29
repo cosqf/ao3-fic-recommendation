@@ -142,7 +142,7 @@ def wrapper():
     frame_height = 610 + extra_rows * 40
 
     theme = st.context.theme.type
-    with open(f"{FRONTEND_DIR}/styles/{theme}.css", "r") as f:
+    with open(FRONTEND_DIR / "styles" / f"{theme}.css", "r") as f:
         css = f.read()
 
     html_content = f"""

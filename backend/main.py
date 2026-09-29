@@ -14,6 +14,11 @@ app = FastAPI()
 def get_worker():
     return PlaywrightWorker(headless=True)
 
+@app.get("/health")
+def health_endpoint():
+    print ("HEALTH")
+    return {"status": "ok", "message": "UP!"}
+
 class ScrapeRequest(BaseModel):
     username: str
     password: str
@@ -29,9 +34,13 @@ def _json_default(value):
     return str(value)
  
 
-def stream(events):
-    for event in events:
-        yield json.dumps(event, default=_json_default) + "\n"
+def stream(events, worker=None):
+    try:
+        for event in events:
+            yield json.dumps(event, default=_json_default) + "\n"
+    finally:
+        if worker is not None:
+            worker.stop()
 
 
 @app.post("/scrape")
@@ -46,8 +55,9 @@ def scrape_endpoint(payload: ScrapeRequest):
         )
 
     worker = get_worker()
+    print ("worker ready")
     return StreamingResponse(
-        stream(run_scrape_pipeline(worker, payload.username, payload.password, existing_df)),
+        stream(run_scrape_pipeline(worker, payload.username, payload.password, existing_df), worker),
         media_type="application/x-ndjson",
     )
 
@@ -61,6 +71,7 @@ class FetchWorksRequest(BaseModel):
 
 @app.post("/fetch_works")
 def fetch_works_endpoint(payload: FetchWorksRequest):
+    print ("fetch!")
     if not payload.username.strip() or not payload.password.strip():
         return StreamingResponse(
             stream([make_event("ERROR", message="username and password are required")]),
@@ -74,8 +85,9 @@ def fetch_works_endpoint(payload: FetchWorksRequest):
         )
  
     worker = get_worker()
+    print ("worker ready")
     return StreamingResponse(
-        stream(fetchingUnreadWorks(worker, payload.username, payload.password, payload.ship, payload.df)),
+        stream(fetchingUnreadWorks(worker, payload.username, payload.password, payload.ship, payload.df), worker),
         media_type="application/x-ndjson",
     )
 
