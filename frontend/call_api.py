@@ -15,7 +15,7 @@ def wakeup_backend():
         response = requests.get(f"{BACKEND_URL}/health", timeout=3)
         print (response)
     except Exception as e:
-        print ("health failed", e)
+        print ("health failed")
         pass
 
 
