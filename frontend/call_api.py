@@ -1,11 +1,11 @@
 import requests
 import json
-from config import API_PORT, API_URL
+from config import API_PORT
 import pandas as pd 
 import datetime
 import math
 
-BACKEND_URL = f"http://{API_URL}:{API_PORT}" 
+BACKEND_URL = st.secrets.get("BACKEND_URL", f"http://localhost:{API_PORT}")
 
 def stream_backend(endpoint: str, payload: dict):
     body = json.dumps(payload, default=_json_default)

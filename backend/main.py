@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.browser_worker import PlaywrightWorker
-from config import API_PORT, API_URL
+from config import API_PORT
 from backend.web import run_scrape_pipeline, make_event, scrap_unread_fics, fetchingUnreadWorks
 
 app = FastAPI()
@@ -82,8 +82,7 @@ def fetch_works_endpoint(payload: FetchWorksRequest):
 def main():
     import uvicorn
 
-    #uvicorn.run(app, host="0.0.0.0", port=8000)
-    uvicorn.run(app, host=API_URL, port=API_PORT)
+    uvicorn.run(app, host="0.0.0.0", port=API_PORT)
 
 if __name__ == "__main__":
     main()

@@ -8,12 +8,14 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 libxrandr2 libgbm1 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt ./requirements.txt
+
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN python -c "from camoufox.sync_api import Camoufox; Camoufox().fetch()"
+RUN camoufox fetch
 
-COPY . .
+COPY config.py ./config.py
+COPY backend ./backend
 
 ENV PORT=8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD exec uvicorn backend.main:app --host 0.0.0.0 --port $PORT

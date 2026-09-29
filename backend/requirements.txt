@@ -4,3 +4,4 @@ uvicorn
 camoufox
 pydantic
 bs4
+scikit-learn

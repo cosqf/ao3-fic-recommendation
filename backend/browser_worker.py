@@ -1,6 +1,5 @@
 import threading
 import queue
-import atexit
 from camoufox.sync_api import Camoufox
 
 class PlaywrightWorker(threading.Thread):
