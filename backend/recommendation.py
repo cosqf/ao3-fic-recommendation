@@ -5,10 +5,11 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from scipy.sparse import hstack, csr_matrix
 import re
 import numpy as np
+from itertools import product
 
 def preprocess_history_data(dataFrame: pd.DataFrame):
     df = dataFrame.copy()
-    
+
     remove_parenthesis_cols = ['ships', 'tags']
     for c in remove_parenthesis_cols:
         df[c] = df[c].apply(lambda x:[re.sub(r"\([^)]*\)", "", item).strip() for item in x if isinstance(item, str)] if isinstance(x, list) else x)
@@ -25,6 +26,14 @@ def preprocess_history_data(dataFrame: pd.DataFrame):
     word_count_scaler = MinMaxScaler()
     df['word_count_normalized'] = word_count_scaler.fit_transform(df[['word_count']])
 
+    df['last_visited'] = pd.to_datetime(df['last_visited'], errors='coerce')
+
+    # drop rows where last_visited couldn't be parsed
+    unparseable = df['last_visited'].isna().sum()
+    if unparseable > 0:
+        print(f"Warning: {unparseable} rows had unparseable last_visited and will be excluded from recency scoring")
+        df = df.dropna(subset=['last_visited'])
+
     # recency
     most_recent_date_in_history = df['last_visited'].max()
     time_diff_days = (most_recent_date_in_history - df['last_visited']).dt.days
@@ -38,7 +47,7 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
     df = preprocessed_df.copy()
 
     # TF-IDF 
-    tfidf_vectorizer = TfidfVectorizer(stop_words='english', min_df=2, max_df=0.9)
+    tfidf_vectorizer = TfidfVectorizer(stop_words='english', min_df=1, max_df=0.9)
     tfidf_matrix = tfidf_vectorizer.fit_transform(df['combined_text_features'])
 
     # one hot encoding 
@@ -59,21 +68,22 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 
 
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
-    bookmark_boost: float = 3.0 
+    bookmark_boost: float = 10.0 
 
-    all_history_fic_vectors = combined_sparse_features
-    recency_scores = preprocessed_df['recency_score'].values
-    bookmarked_status = preprocessed_df['bookmarked'].values
+    all_history_fic_vectors = csr_matrix(combined_sparse_features)
+    recency_scores = preprocessed_df['recency_score'].values.astype(np.float64)
+    bookmarked_status = preprocessed_df['bookmarked'].values.astype(np.float64)
+    bookmarked_status = pd.array(bookmarked_status, dtype="boolean").to_numpy(dtype=float, na_value=0.0)
 
-    weights = recency_scores.copy()
-    weights[bookmarked_status] *= bookmark_boost
+    weights = (recency_scores + (bookmarked_status * bookmark_boost)).astype(float)
 
     total_weight_sum = np.sum(weights)
     if total_weight_sum == 0:
         print("Warning: Sum of weights is zero. User profile will be a zero vector.")
         return pd.Series(0.0, index=feature_names)
 
-    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis]) 
+    weighted_vectors = all_history_fic_vectors.multiply(weights[:, np.newaxis])
+    weighted_vectors = csr_matrix(weighted_vectors)
 
     summed_sparse_vector = weighted_vectors.sum(axis=0)
     user_profile_vector_sparse = csr_matrix(summed_sparse_vector) / total_weight_sum
@@ -81,6 +91,81 @@ def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, 
     user_profile_vector = pd.Series(user_profile_vector_sparse.toarray().flatten(), index=feature_names)
 
     return user_profile_vector
+
+
+
+def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model_components: dict):
+    df_to_score = unread_df.copy() 
+
+    tfidf_vectorizer = model_components['tfidf_vectorizer']
+    ohe_rating_encoder = model_components['ohe_rating_encoder']
+    word_count_scaler = model_components['word_count_scaler']
+
+    # text data
+    text_columns = ['fandom', 'orientations', 'ships', 'tags']
+    for c in text_columns:
+        df_to_score[f"{c}_str"] = df_to_score[c].apply(lambda x: ' '.join(map(str, x)) if isinstance(x, list) else str(x) if pd.notna(x) else '')
+    
+    df_to_score['combined_text_features'] = df_to_score[[f"{c}_str" for c in text_columns]].agg(' '.join, axis=1)
+    df_to_score['combined_text_features'] = df_to_score['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
+
+    # normalized word count
+    df_to_score['word_count'] = df_to_score['word_count'].fillna(0).clip(lower=0, upper=word_count_scaler.data_max_[0])
+    df_to_score['word_count_normalized'] = word_count_scaler.transform(df_to_score[['word_count']])
+    df_to_score["recency_score"] = 1 
+
+    # TF-IDF
+    unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['combined_text_features'])
+
+    # One-Hot Encoding
+    known_ratings = ohe_rating_encoder.categories_[0]
+    df_to_score['rating'] = df_to_score['rating'].where(df_to_score['rating'].isin(known_ratings), other=known_ratings[0])
+    unread_ohe_rating_sparse = ohe_rating_encoder.transform(df_to_score[['rating']])
+
+    # word count
+    numerical_features_unread = df_to_score[['word_count_normalized', 'recency_score']].values
+    numerical_sparse_unread = csr_matrix(numerical_features_unread)
+
+    # combining everything
+    combined_unread_features_sparse = hstack([unread_tfidf_matrix, unread_ohe_rating_sparse, numerical_sparse_unread])
+
+    # cosine similarity
+    user_profile_reshaped = user_profile.to_numpy().reshape(1, -1) # reshaping to 2D
+
+    # Calculate similarity between user profile and each unread fic
+    # The output will be a 1D array of scores, one for each unread fic
+    similarity_scores = cosine_similarity(user_profile_reshaped, combined_unread_features_sparse)[0] # type: ignore
+
+    df_to_score['recommendation_score'] = similarity_scores
+
+    df_to_score = df_to_score.sort_values(by='recommendation_score', ascending=False)
+
+    return df_to_score
+
+
+def generate_common_ship_tags(dataFrame, ship_tag = None, tag_filter = None):
+    tag_ship_pairs = []
+    for _, row in dataFrame.iterrows():
+        tags = row["tags"]
+        ships = row["ships"]
+        if not isinstance(tags, list):
+            tags = [tags] if pd.notna(tags) else []
+        if not isinstance(ships, list):
+            ships = [ships] if pd.notna(ships) else []
+
+        if tags and ships:
+            tag_ship_pairs.extend(list(product(tags, ships)))
+
+    pairs = pd.DataFrame(tag_ship_pairs, columns=["tag", "ship"])
+
+    if ship_tag is not None:
+        pairs = pairs[pairs['ship'] == ship_tag] 
+
+    if tag_filter is not None:
+        pairs = pairs[pairs['tag'] == tag_filter] 
+
+    tag_ship_counts = pairs.value_counts().reset_index(name="count")
+    return tag_ship_counts
 
 
 def create_user_profile_from_history(history_df: pd.DataFrame):
@@ -102,49 +187,3 @@ def create_user_profile_from_history(history_df: pd.DataFrame):
         'feature_names': feature_names_list
     }
     return user_profile, model_components
-
-
-def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model_components: dict):
-    df_to_score = unread_df.copy() 
-
-    tfidf_vectorizer = model_components['tfidf_vectorizer']
-    ohe_rating_encoder = model_components['ohe_rating_encoder']
-    word_count_scaler = model_components['word_count_scaler']
-
-    # text data
-    text_columns = ['fandom', 'orientations', 'ships', 'tags']
-    for c in text_columns:
-        df_to_score[f"{c}_str"] = df_to_score[c].apply(lambda x: ' '.join(map(str, x)) if isinstance(x, list) else str(x) if pd.notna(x) else '')
-    
-    df_to_score['combined_text_features'] = df_to_score[[f"{c}_str" for c in text_columns]].agg(' '.join, axis=1)
-    df_to_score['combined_text_features'] = df_to_score['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
-
-    # normalized word count
-    df_to_score['word_count_normalized'] = word_count_scaler.transform(df_to_score[['word_count']])
-    df_to_score["recency_score"] = 1 
-
-    # TF-IDF
-    unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['combined_text_features'])
-
-    # One-Hot Encoding
-    unread_ohe_rating_sparse = ohe_rating_encoder.transform(df_to_score[['rating']])
-
-    # word count
-    numerical_features_unread = df_to_score[['word_count_normalized', 'recency_score']].values
-    numerical_sparse_unread = csr_matrix(numerical_features_unread) 
-
-    # combining everything
-    combined_unread_features_sparse = hstack([unread_tfidf_matrix, unread_ohe_rating_sparse, numerical_sparse_unread])
-
-    # cosine similarity
-    user_profile_reshaped = user_profile.to_numpy().reshape(1, -1) # reshaping to 2D
-
-    # Calculate similarity between user profile and each unread fic
-    # The output will be a 1D array of scores, one for each unread fic
-    similarity_scores = cosine_similarity(user_profile_reshaped, combined_unread_features_sparse)[0] # type: ignore
-
-    df_to_score['recommendation_score'] = similarity_scores
-
-    df_to_score = df_to_score.sort_values(by='recommendation_score', ascending=False)
-
-    return df_to_score

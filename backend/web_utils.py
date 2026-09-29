@@ -2,12 +2,20 @@ from playwright.sync_api import Playwright
 import re
 from urllib.parse import quote_plus
 import pandas as pd
+from itertools import product
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
         browser = pw.chromium.launch(headless=True).new_context(user_agent=agent)
-        return browser.new_page()
+        return browser
 
+def report(text, status_widget=None, is_error=False):
+    print(text)
+    if status_widget:
+        if is_error:
+            status_widget.error(text)
+        else:
+            status_widget.markdown(f'<p class="archive-sub">{text}</p>', unsafe_allow_html=True)
 
 def get_number_of_pages_from_pagination (page, pagination_selector):
     pagination_locator = page.locator(pagination_selector)
@@ -44,7 +52,7 @@ def extract_and_parse_last_visited(full_text):
         last_visited_str = f"{day} {month} {year}"
         try:
             parsed_date = pd.to_datetime(last_visited_str, format="%d %b %Y")
-            return parsed_date
+            return parsed_date.isoformat()
         except ValueError:
             print(f"Warning: Could not parse date '{last_visited_str}' from text: {full_text}")
             return None 
@@ -59,3 +67,24 @@ def format_unread_fic_tags (number_tags, tag_ship_counts, ship_tag):
     formatted_ship_tag = re.sub(r"\[^]*\)", "", ship_tag).strip()
     formatted_ship_tag = quote_plus(formatted_ship_tag)
     return formatted_tags, formatted_ship_tag
+
+def is_rate_limited(page):
+    return (
+        "Retry later" in page.title() or
+        page.query_selector("div#main p") is not None and
+        "unusual traffic" in (page.query_selector("div#main p").inner_text() or "").lower()
+)
+
+def is_cloudflare_blocked(page):
+    return (
+        "Shields are up" in page.content() or
+        "cf-challenge" in page.content() or
+        page.query_selector("input#challenge-stage") is not None
+    )
+
+def safe_goto(page, url, timeout=30000):
+    try:
+        page.goto(url, wait_until="networkidle", timeout=timeout)
+    except Exception:
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        page.wait_for_load_state("networkidle", timeout=15000)

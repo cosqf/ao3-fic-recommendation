@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap');
+
+:root {
+    --bg:        #1e1812; 
+    --bg-app:    #12100c; 
+    --text:      #c2b59e; 
+    --muted:     #8b7653; 
+    --accent:    #c9a87a; 
+    --accent-lt: #a33520; 
+    --flourish:  #b04030; 
+    --border:    #3a2f1e; 
+    --border-lt: #231f15; 
+}
+
+.stApp {
+    background-image: radial-gradient(var(--border-lt) 1px, transparent 0) !important;
+    background-size: 24px 24px !important;
+    font-family: 'EB Garamond', serif !important;
+}
+[data-testid="stMainBlockContainer"] {
+    background: var(--bg) !important;
+    border: 1px solid var(--border) !important;
+    border-top: 5px solid var(--accent-lt) !important;
+    border-radius: 4px !important;
+    padding: clamp(15px, 5vw, 50px) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45) !important;
+    margin-top: 30px !important;
+    max-width: 1100px !important;
+}
+[data-testid="stSidebar"] {
+    border-right: 1px solid var(--border) !important;
+}
+h1, h2, h3 {
+    font-family: 'EB Garamond', serif !important;
+    color: var(--accent) !important;
+    font-weight: 600 !important;
+}
+.serif-body {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--text);
+}
+.archive-sub {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+}
+.flourish {
+    text-align: center;
+    margin: 25px 0;
+    color: var(--flourish);
+    font-size: 1.5rem;
+    opacity: 0.6;
+}
+div.stButton > button {
+    background-color: var(--accent-lt) !important;
+    color: #f0e6d3 !important;
+    font-family: 'Courier Prime', monospace !important;
+    border: 1px solid var(--accent-lt) !important;
+    border-radius: 2px !important;
+    padding: 10px 24px !important;
+    transition: all 0.2s ease !important;
+}
+div.stButton > button:hover {
+    background-color: var(--bg) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent-lt) !important;
+}
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stSelectbox"] select {
+    border-color: var(--border) !important;
+}
+div[data-testid="stCheckbox"] label p {
+    font-family: 'EB Garamond', serif !important;
+    font-size: 1.1rem !important;
+}
+.fic-title a {
+    color: var(--accent-lt) !important;
+    text-decoration: none;
+}
+.fic-title a:hover {
+    text-decoration: underline;
+}

@@ -73,13 +73,16 @@ def giveUserInfo (df, dateFilter = None, fandomFilter = None, shipFilter = None,
     for orientation, percentage in o_formattedPercentages.head(10).items():
         print(f" {orientation}: {percentage}")
 
+    author_counts = Counter(author.strip() for authors in dataFrame["author"] if authors is not None for author in authors)
+    print("\nYour favorite authors are:\n", formatTuplesInList (author_counts.most_common(10)))
+
     print ("\nThe most common ship-tag combos are:")
     tag_ship_counts = generate_common_ship_tags(dataFrame)
 
     print(tag_ship_counts.head(10))
 
 
-def generate_common_ship_tags(dataFrame, ship_tag = None):
+def generate_common_ship_tags(dataFrame, ship_tag = None, tag_filter = None):
     tag_ship_pairs = []
     for _, row in dataFrame.iterrows():
         tags = row["tags"]
@@ -97,9 +100,34 @@ def generate_common_ship_tags(dataFrame, ship_tag = None):
     if ship_tag is not None:
         pairs = pairs[pairs['ship'] == ship_tag] 
 
+    if tag_filter is not None:
+        pairs = pairs[pairs['tag'] == tag_filter] 
+
     tag_ship_counts = pairs.value_counts().reset_index(name="count")
     return tag_ship_counts
 
+def generate_common_ship_ratings(dataFrame, ship_tag=None, rating_tag=None):
+    rating_ship_pairs = []
+    for _, row in dataFrame.iterrows():
+        rating = row["rating"]
+        ships = row["ships"]
+        if not isinstance(ships, list):
+            ships = [ships] if pd.notna(ships) else []
+
+        if pd.notna(rating) and ships:
+            for ship in ships:
+                rating_ship_pairs.append((rating, ship))
+
+    pairs = pd.DataFrame(rating_ship_pairs, columns=["rating", "ship"])
+
+    if ship_tag is not None:
+        pairs = pairs[pairs['ship'] == ship_tag] 
+
+    if rating_tag is not None:
+        pairs = pairs[pairs['rating'] == rating_tag] 
+
+    rating_ship_counts = pairs.value_counts().reset_index(name="count")
+    return rating_ship_counts
 
 def apply_filters(df: pd.DataFrame, dateFilter = None, fandomFilter = None, shipFilter = None, explicitFilter = None, orientationFilter = None):
     if df.empty:
