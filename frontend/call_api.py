@@ -30,13 +30,24 @@ def stream_backend(endpoint: str, payload: dict):
             stream=True,
             timeout=300,
         )
+        if response.status_code >= 400:
+            try:
+                detail = response.json()
+            except ValueError:
+                detail = response.text
+            yield "ERROR", f"Backend returned {response.status_code}: {detail}", None
+            return
 
         for line in response.iter_lines():
-            if line:
+            if not line:
+                continue
+            try:
                 event = json.loads(line.decode("utf-8"))
                 print ("received message of type " + event["type"] + " saying " + event["message"])
-                yield event["type"], event.get("message", ""), event.get("data", None)
-
+            except json.JSONDecodeError:
+                yield "ERROR", f"Received a non-JSON line from backend: {line[:200]!r}", None
+                continue
+            yield event.get("type", "ERROR"), event.get("message", ""), event.get("data", None)
     except requests.exceptions.RequestException as e:
         yield "ERROR", f"Connection error: {str(e)}", None
 
