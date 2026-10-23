@@ -49,7 +49,7 @@ def render_login_and_scrape():
  
         with st.form("login_form"):
             username = st.text_input("Username", max_chars=40)
-            password = st.text_input("Password", type="password")
+            password = st.text_input("Password", type="password", max_chars=72)
             submit_button = st.form_submit_button("Access Archives")
  
     status = st.empty()

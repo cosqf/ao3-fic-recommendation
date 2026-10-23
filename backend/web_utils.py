@@ -111,9 +111,29 @@ def _short(e):
     return f"{type(e).__name__}: {lines[0]}" if lines else type(e).__name__
 
 
-def load_page(page, url, progress_q=None, ready_selector=None, retries=PAGE_RETRIES, wait_seconds=PAGE_RETRY_WAIT):
+class ScrapeCancelled(ScrapeError):
+    """The run was cancelled (client went away, or the same session started a new run)."""
+    def __init__(self, message="scrape cancelled", partial=None):
+        super().__init__(message, partial)
+ 
+
+def check_cancelled(cancel):
+    if cancel is not None and cancel.is_set():
+        raise ScrapeCancelled()
+ 
+ 
+def cancellable_sleep(cancel, seconds):
+    if cancel is None:
+        time.sleep(seconds)
+    elif cancel.wait(seconds):
+        raise ScrapeCancelled()
+
+
+def load_page(page, url, progress_q=None, ready_selector=None,
+              retries=PAGE_RETRIES, wait_seconds=PAGE_RETRY_WAIT, cancel=None):
     problem = ""
     for attempt in range(retries + 1):
+        check_cancelled(cancel)
         blocked = False
         try:
             safe_goto(page, url)
@@ -135,6 +155,6 @@ def load_page(page, url, progress_q=None, ready_selector=None, retries=PAGE_RETR
             msg = f"{problem}. Retrying in {wait_seconds}s (attempt {attempt + 2} of {retries + 1})..."
             print(msg)
             notify(progress_q, {"warning": msg})
-            time.sleep(wait_seconds)
+            cancellable_sleep(cancel, wait_seconds)
 
     raise ScrapeError(f"{problem}; gave up after {retries + 1} attempts ({url})")

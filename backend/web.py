@@ -15,10 +15,12 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 # ----------------------------------------------------------------------------------
 # everything the backend streams to the frontend
 #
+#   HEARTBEAT              -                        sent every few seconds while a job runs, so a
+#                                                   client that left is noticed promptly (ignore it)
 #   STATUS                 message                  free text
 #   WARNING                message                  something went wrong but the run continues
 #                                                   (page retry, empty page...)
-#   LOGIN_SUCCESS/FAILED   message
+#   LOGIN_SUCCESS / LOGIN_FAILED   message
 #   <STAGE>_PROGRESS       data = progress dict     STAGE: HISTORY, MARKED_LATER, BOOKMARK, UNREAD
 #   <STAGE>_DONE           data = None              stage finished (never carries records)
 #   DONE                   data = records           the ONLY success event carrying data,
@@ -26,6 +28,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 #   ERROR                  data = records | None    the best-known result at the moment of failure,
 #                                                   in the same shape DONE would have used
 # ----------------------------------------------------------------------------------
+
+HEARTBEAT_SECONDS = 5
 
 
 def make_event(event_type, message="", data=None):
@@ -46,8 +50,9 @@ def _done_message(base, stats):
 #run job(page, progress_q) on the browser worker and relay its progress.
 def run_stage(worker, job, stage, stats):
     progress_q = queue.Queue()
+    cancel = getattr(worker, "cancel_event", None)
     try:
-        holder, done = worker.submit(lambda page: job(page, progress_q))
+        holder, done = worker.submit(lambda page: job(page, progress_q, cancel))
     except RuntimeError as e:
         raise ScrapeError(str(e))
 
@@ -64,10 +69,14 @@ def run_stage(worker, job, stage, stats):
             if item:
                 yield make_event(f"{stage}_PROGRESS", data=item)
 
+    last_beat = time.monotonic()
     while not done.wait(timeout=0.1):
         yield from drain()
         if not worker.is_alive():
             raise ScrapeError(f"browser worker stopped unexpectedly (startup error: {worker.startup_error})")
+        if time.monotonic() - last_beat >= HEARTBEAT_SECONDS:
+            last_beat = time.monotonic()
+            yield make_event("HEARTBEAT")
     yield from drain()
 
     error = holder.get("error")
@@ -84,8 +93,10 @@ def logIn(worker, user, pwd, stats):
     yield make_event("STATUS", message="Logging in...")
     try:
         success, message = yield from run_stage(
-            worker, lambda page, q: _login_job(page, user, pwd, q), "LOGIN", stats
+            worker, lambda page, q, cancel: _login_job(page, user, pwd, q, cancel), "LOGIN", stats
         )
+    except ScrapeCancelled:
+        return False
     except ScrapeError as e:
         print(f"logIn failed: {e.message}")
         yield make_event("LOGIN_FAILED", message=e.message)
@@ -101,9 +112,10 @@ def logIn(worker, user, pwd, stats):
     return True
 
 
-def _login_job(page, user, pwd, progress_q):
+def _login_job(page, user, pwd, progress_q, cancel=None):
     login_url = "https://archiveofourown.org/users/login"
-    load_page(page, login_url, progress_q=progress_q, ready_selector="#user_login")
+    load_page(page, login_url, progress_q=progress_q, ready_selector="#user_login", cancel=cancel)
+    check_cancelled(cancel)
 
     page.fill("#user_login", user)
     page.fill("#user_password", pwd)
@@ -146,6 +158,8 @@ def run_scrape_pipeline(worker, username, password, initial_df, ship=None):
     for name, stage in stages:
         try:
             ledger = yield from stage(worker, username, ledger, stats)
+        except ScrapeCancelled:
+            return
         except ScrapeError as e:
             best = e.partial if e.partial is not None else ledger
             yield make_event("ERROR", message=f"{name}: {e.message}", data=_records(best))
@@ -167,7 +181,7 @@ def gettingHistory(worker, username, ledger, stats):
     print("getting history")
     link_base = f"https://archiveofourown.org/users/{username}/readings?page="
 
-    def _job(page, progress_q):
+    def _job(page, progress_q, cancel):
         try:
             new_rows = scrape_works(
                 page, link_base,
@@ -176,9 +190,10 @@ def gettingHistory(worker, username, ledger, stats):
                 is_processing_history=True,
                 history_df=ledger,
                 progress_q=progress_q,
+                cancel=cancel,
             )
         except ScrapeError as e:
-            raise ScrapeError(e.message, partial=_merge_history(ledger, e.partial)) from e
+            raise type(e)(e.message, partial=_merge_history(ledger, e.partial)) from e
         return _merge_history(ledger, new_rows)
 
     result = yield from run_stage(worker, _job, "HISTORY", stats)
@@ -196,7 +211,7 @@ def removingMarkedLater(worker, username, ledger, stats):
         kept = ledger[~ledger["fic_id"].isin(marked_df["fic_id"])]
         return kept.dropna(subset=["fic_id"]).reset_index(drop=True)
 
-    def _job(page, progress_q):
+    def _job(page, progress_q, cancel):
         try:
             marked = scrape_works(
                 page, link_base,
@@ -205,10 +220,11 @@ def removingMarkedLater(worker, username, ledger, stats):
                 is_processing_history=True,
                 history_df=pd.DataFrame(columns=WORK_DF_COL),
                 progress_q=progress_q,
+                cancel=cancel,
             )
         except ScrapeError as e:
             # partial = the ledger minus the marked works found before the failure
-            raise ScrapeError(e.message, partial=_without_marked(e.partial)) from e
+            raise type(e)(e.message, partial=_without_marked(e.partial)) from e
         return _without_marked(marked)
 
     result = yield from run_stage(worker, _job, "MARKED_LATER", stats)
@@ -217,8 +233,8 @@ def removingMarkedLater(worker, username, ledger, stats):
 
 
 def gettingBookmarks(worker, username, ledger, stats):
-    def _job(page, progress_q):
-        return checkBookmarks(username, ledger, page, progress_q=progress_q)
+    def _job(page, progress_q, cancel):
+        return checkBookmarks(username, ledger, page, progress_q=progress_q, cancel=cancel)
 
     result = yield from run_stage(worker, _job, "BOOKMARK", stats)
     yield make_event("BOOKMARK_DONE", message="bookmark scraping complete.")
@@ -245,8 +261,8 @@ def fetchingUnreadWorks(worker, username, password, ship, history_records):
         yield make_event("ERROR", message=f"unexpected error building profile: {e}")
         return
  
-    def _job(page, progress_q):
-        return scrap_unread_fics(page, history_df, tag_ship_counts, ship, progress_q=progress_q)
+    def _job(page, progress_q, cancel):
+        return scrap_unread_fics(page, history_df, tag_ship_counts, ship, progress_q=progress_q, cancel=cancel)
  
     def _score(df):
         return score_unread_fanfics(df, user_profile_vector, fitted_model_components)
@@ -256,6 +272,8 @@ def fetchingUnreadWorks(worker, username, password, ship, history_records):
     try:
         df_unread = yield from run_stage(worker, _job, "UNREAD", stats)
         yield make_event("UNREAD_DONE", message="unread fic scrape complete.")
+    except ScrapeCancelled:
+        return
     except ScrapeError as e:
         scrape_error = e
         df_unread = e.partial
@@ -299,22 +317,23 @@ def _work_ref(work):
         return "id unavailable"
 
 
-def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, get_summary=False, max_number_works=None, progress_q=None, progress_offset=0):
+def scrape_works(page, base_url_full_query, pagination_selector, work_list_selector, is_processing_history, history_df, get_summary=False, max_number_works=None, progress_q=None, progress_offset=0, cancel=None):
     rows = []
     known_ids = set(history_df['fic_id'].dropna().tolist())
     current_page = 1
 
     try:
         print(f"Navigating to the first page: {base_url_full_query}1")
-        load_page(page, base_url_full_query + "1", progress_q=progress_q, ready_selector="h2.heading")
+        load_page(page, base_url_full_query + "1", progress_q=progress_q, ready_selector="h2.heading", cancel=cancel)
 
         last_page = get_number_of_pages_from_pagination(page, pagination_selector)
         print("total pages to read: ", last_page)
 
         for current_page in range(1, last_page + 1):
+            check_cancelled(cancel)
             notify(progress_q, {"current_page": current_page, "total_pages": last_page, "valid_works": progress_offset + len(rows)})
             if current_page > 1:  # page 1 is already loaded
-                load_page(page, base_url_full_query + str(current_page), progress_q=progress_q, ready_selector="h2.heading")
+                load_page(page, base_url_full_query + str(current_page), progress_q=progress_q, ready_selector="h2.heading", cancel=cancel)
 
             work_list = page.locator("li[role='article']")
             work_count_on_page = work_list.count()
@@ -329,6 +348,7 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
             found_repeat_on_page = False
 
             for i in range(work_count_on_page):
+                check_cancelled(cancel)  # outside the try: a cancel must not count as a parse failure
                 work = work_list.nth(i)
                 try:
                     processed_work = processWork(work, is_processing_history, get_summary)
@@ -359,7 +379,7 @@ def scrape_works(page, base_url_full_query, pagination_selector, work_list_selec
                 break
 
     except ScrapeError as e:
-        raise ScrapeError(e.message, partial=_rows_to_df(rows)) from e
+        raise type(e)(e.message, partial=_rows_to_df(rows)) from e
     except Exception as e:
         raise ScrapeError(f"unexpected error on page {current_page}: {e}", partial=_rows_to_df(rows)) from e
 
@@ -376,7 +396,7 @@ def _combine_unread(existing, new):
     return pd.concat([existing, new], ignore_index=True)
 
 
-def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=None):
+def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=None, cancel=None):
     max_number_fics = 200
     max_tags = 5
     notify(progress_q, {"max_fics": max_number_fics})
@@ -394,6 +414,7 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
 
     try:
         while len(unread_df) < max_number_fics and number_tags >= 0:
+            check_cancelled(cancel)
             current_url_query = f"work_search%5Brelationship_names%5D={formatted_ship_tag}&work_search%5Bfreeform_names%5D="
             for t in range(number_tags):
                 current_url_query = f"{current_url_query}%2C{formatted_tags[t]}"
@@ -421,9 +442,10 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
                     max_number_works=100 if number_works_to_read > 100 else number_works_to_read,
                     progress_q=progress_q,
                     progress_offset=len(unread_df),
+                    cancel=cancel,
                 )
             except ScrapeError as e:
-                raise ScrapeError(e.message, partial=_combine_unread(unread_df, e.partial)) from e
+                raise type(e)(e.message, partial=_combine_unread(unread_df, e.partial)) from e
 
             unread_df = _combine_unread(unread_df, newly_scraped_fics)
             notify(progress_q, {
@@ -440,7 +462,7 @@ def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=No
     return unread_df
 
 
-def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
+def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None, cancel=None):
     print("checking bookmarks")
     ledger = dataframe.copy()
     found_ids = set()
@@ -457,19 +479,21 @@ def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
             ledger["bookmarked"] = ledger["bookmarked"].eq(True) | found
  
     try:
-        load_page(page, base_url + "1", progress_q=progress_q, ready_selector="#main > h2")
+        load_page(page, base_url + "1", progress_q=progress_q, ready_selector="#main > h2", cancel=cancel)
         last_page = get_number_of_pages_from_pagination(page, "ol.pagination.actions")
         print("total bookmark pages to read: ", last_page)
  
         for current_page in range(1, last_page + 1):
+            check_cancelled(cancel)
             if current_page > 1:  # page 1 is already loaded
-                load_page(page, base_url + str(current_page), progress_q=progress_q, ready_selector="#main > h2")
+                load_page(page, base_url + str(current_page), progress_q=progress_q, ready_selector="#main > h2", cancel=cancel)
             notify(progress_q, {"current_page": current_page, "total_pages": last_page})
  
             work_list = page.locator("li[role='article']")
             count = work_list.count()
  
             for i in range(count):
+                check_cancelled(cancel)
                 work = work_list.nth(i)
                 try:
                     if "deleted" in (work.get_attribute("class") or ""):
@@ -494,7 +518,7 @@ def checkBookmarks(username, dataframe: pd.DataFrame, page, progress_q=None):
  
     except ScrapeError as e:
         _set_flags(reset=False)
-        raise ScrapeError(e.message, partial=ledger) from e
+        raise type(e)(e.message, partial=ledger) from e
     except Exception as e:
         _set_flags(reset=False)
         raise ScrapeError(f"unexpected error on bookmarks page {current_page}: {e}", partial=ledger) from e

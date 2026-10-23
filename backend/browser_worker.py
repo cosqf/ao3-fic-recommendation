@@ -3,9 +3,10 @@ import queue
 from camoufox.sync_api import Camoufox
 
 class PlaywrightWorker(threading.Thread):
-    def __init__(self, headless = True):
+    def __init__(self, headless = True, cancel_event = None):
         super().__init__(daemon=True)
         self.headless = headless
+        self.cancel_event = cancel_event if cancel_event is not None else threading.Event()
         self._queue = queue.Queue()
         self._ready = threading.Event()
         self._camoufox = None
