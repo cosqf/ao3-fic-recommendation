@@ -79,7 +79,16 @@ def render_ship_and_login():
     fetch_works(payload)
  
  
+def render_warnings(target):
+    warnings = st.session_state.get("unread_warnings") or []
+    if warnings:
+        target.warning("\n".join(f"- {w}" for w in warnings))
+
+
 def fetch_works(payload):
+    st.session_state.unread_warnings = []
+    st.session_state.unread_message = None
+
     with st.container(border=True):
         st.markdown('<div class="archive-sub" style="margin-bottom: 10px;">Probing the Shelves...</div>', unsafe_allow_html=True)
         progress_bar = st.progress(0)
@@ -95,6 +104,7 @@ def fetch_works(payload):
         st.divider()
         status_display = st.empty()
         tags_display = st.empty()
+        warnings_display = st.empty()
  
     max_fics = 200
     final_records = None
@@ -108,6 +118,10 @@ def fetch_works(payload):
             )
             # .markdown(f'<p class="archive-sub">{message}</p>', unsafe_allow_html=True)
  
+        elif event_type == "WARNING":
+            st.session_state.unread_warnings.append(message)
+            render_warnings(warnings_display)
+
         elif event_type == "LOGIN_FAILED":
             st.session_state.logged_in = False
             st.session_state.pop("username", None)
@@ -155,12 +169,11 @@ def fetch_works(payload):
             return
  
         elif event_type == "UNREAD_DONE":
-            final_records = data
             progress_bar.progress(1.0)
-            status_display.markdown(
-                "<p style='text-align:center; color:#8c2d19;'><b>Scoring fics...</b></p>",
-                unsafe_allow_html=True,
-            )
+
+        elif event_type == "DONE":
+            final_records = data
+            st.session_state.unread_message = message
  
     if final_records is not None:
         st.session_state.df_scored_unread_fics = pd.DataFrame(final_records)
@@ -171,6 +184,10 @@ def fetch_works(payload):
 def display_fics():
     df_scored = st.session_state.df_scored_unread_fics
     top_n = min(10, len(df_scored))
+
+    if st.session_state.get("unread_message"):
+        st.caption(st.session_state.unread_message)
+    render_warnings(st)
 
     if top_n == 0:
         st.warning("No unread fics could be scored for this ship. Try a different one.")

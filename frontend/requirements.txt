@@ -1,4 +1,4 @@
 streamlit
-product
 pandas
 requests
+google-auth

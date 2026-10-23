@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from collections import Counter
 from itertools import product as iterproduct
-from wrapped import generate_common_ship_tags, generate_common_ship_ratings
+from frontend.wrapped import generate_common_ship_tags, generate_common_ship_ratings
 import altair as alt
 
 

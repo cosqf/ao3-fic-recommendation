@@ -7,20 +7,119 @@ import re
 import numpy as np
 from itertools import product
 
+BOOKMARK_BOOST = 10.0       # extra weight of a bookmarked work
+
+TAG_PRIOR_STRENGTH = 10.0   # how many "virtual works" of the user's overall taste are mixed into a ship's tags
+MAX_SEARCH_TAGS = 5
+PORTABLE_MIN_WORKS = 3      # a tag never read in the ship must appear in this many works...
+PORTABLE_MIN_FANDOMS = 2    # ...spread over at least this many fandoms to be used as a backfill
+
+_FIELD_PREFIX = {'fandom': 'fandom', 'orientations': 'orientation', 'ships': 'ship', 'tags': 'tag'}
+_PAREN_RE = re.compile(r"\([^)]*\)")
+
+
+def _normalize(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text).lower()).strip()
+
+
+def _as_str_list(value):
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, str)]
+    if isinstance(value, str):
+        return [value]
+    return []
+
+
+def feature_tokens(row) -> list:
+    tokens = []
+    for column, prefix in _FIELD_PREFIX.items():
+        for item in _as_str_list(row.get(column)):
+            if column in ('ships', 'tags'):
+                item = _PAREN_RE.sub("", item)
+            item = _normalize(item)
+            if item:
+                tokens.append(f"{prefix}:{item}")
+    return tokens
+
+
+def build_feature_tokens(df: pd.DataFrame) -> pd.Series:
+    return pd.Series([feature_tokens(r) for r in df.to_dict('records')], index=df.index, dtype=object)
+
+
+def _identity_analyzer(tokens):
+    return tokens
+
+
+def recency_from_days(days_since_latest):
+    return 1 / (1 + np.exp(0.009 * (days_since_latest - 600)))
+
+
+def history_weights(df: pd.DataFrame) -> np.ndarray:
+    # weight of each history work: recency + bookmark boost
+
+    visited = pd.to_datetime(df['last_visited'], errors='coerce')
+    days = (visited.max() - visited).dt.days
+    recency = recency_from_days(days).fillna(0.0).to_numpy(dtype=float)
+    bookmarked = df['bookmarked'].eq(True).to_numpy(dtype=float)
+    return recency + bookmarked * BOOKMARK_BOOST
+
+def select_search_tags(history_df: pd.DataFrame, ship: str, max_tags: int = MAX_SEARCH_TAGS,
+                       prior_strength: float = TAG_PRIOR_STRENGTH) -> pd.DataFrame:
+# score(tag) = (ship_works(tag) + prior_strength * overall_share(tag)) / (ship_works_total + prior_strength)
+
+    columns = ['tag', 'score', 'source', 'ship_works', 'total_works']
+    df = history_df.reset_index(drop=True)
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+
+    weights = history_weights(df)
+    total_weight = float(weights.sum())
+    in_ship = df['ships'].apply(lambda s: ship in s if isinstance(s, list) else False).to_numpy()
+    ship_work_total = int(in_ship.sum())
+    all_fandoms = {f for cell in df['fandom'] for f in _as_str_list(cell)}
+
+    stats = {}  # normalized tag -> counters
+    for i, row in enumerate(df.to_dict('records')):
+        fandoms = set(_as_str_list(row.get('fandom')))
+        for original in {t.strip() for t in _as_str_list(row.get('tags')) if t.strip()}:
+            key = _normalize(original)
+            st = stats.setdefault(key, {'names': {}, 'weight': 0.0, 'works': 0, 'ship_works': 0, 'fandoms': set()})
+            st['names'][original] = st['names'].get(original, 0) + 1
+            st['weight'] += weights[i]
+            st['works'] += 1
+            st['fandoms'] |= fandoms
+            if in_ship[i]:
+                st['ship_works'] += 1
+
+    rows = []
+    for key, st in stats.items():
+        in_this_ship = st['ship_works'] > 0
+        portable = len(all_fandoms) <= 1 or (
+            st['works'] >= PORTABLE_MIN_WORKS
+            and len(st['fandoms']) >= PORTABLE_MIN_FANDOMS
+            and _PAREN_RE.search(key) is None)
+        if not (in_this_ship or portable):
+            continue
+        overall_share = st['weight'] / total_weight if total_weight > 0 else 0.0
+        score = (st['ship_works'] + prior_strength * overall_share) / (ship_work_total + prior_strength)
+        name = sorted(st['names'].items(), key=lambda kv: (-kv[1], kv[0]))[0][0]  # most common spelling
+        rows.append((name, score, 'ship' if in_this_ship else 'backfill', st['ship_works'], st['works'], key))
+
+    rows.sort(key=lambda r: (-r[1], r[2] != 'ship', r[5]))      # 1) select the best scores
+    chosen = rows[:max_tags]
+    chosen.sort(key=lambda r: (r[2] != 'ship', -r[1], r[5]))    # 2) ship's own tags first
+    return pd.DataFrame([r[:5] for r in chosen], columns=columns)
+
+
+class ProfileError(Exception):
+    """The history can't produce a usable reading profile. The message is meant for the user."""
+
+
 def preprocess_history_data(dataFrame: pd.DataFrame):
     df = dataFrame.copy()
 
-    remove_parenthesis_cols = ['ships', 'tags']
-    for c in remove_parenthesis_cols:
-        df[c] = df[c].apply(lambda x:[re.sub(r"\([^)]*\)", "", item).strip() for item in x if isinstance(item, str)] if isinstance(x, list) else x)
-
-    # preparation for vectorizing text data
-    text_columns = ['fandom', 'orientations', 'ships', 'tags']
-    for c in text_columns:
-        df[f"{c}_str"] = df[c].apply(lambda x: ' '.join(map(str, x)) if isinstance(x, list) else str(x) if pd.notna(x) else '')
-    
-    df['combined_text_features'] = df[[f"{c}_str" for c in text_columns]].agg(' '.join, axis=1)
-    df['combined_text_features'] = df['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
+    # every fandom / orientation / ship / tag is one token
+    df['feature_tokens'] = build_feature_tokens(df)
 
     # normalized word count
     word_count_scaler = MinMaxScaler()
@@ -38,7 +137,7 @@ def preprocess_history_data(dataFrame: pd.DataFrame):
     most_recent_date_in_history = df['last_visited'].max()
     time_diff_days = (most_recent_date_in_history - df['last_visited']).dt.days
     
-    df["recency_score"] = 1 / (1 + np.exp(0.009 * (time_diff_days - 600)))
+    df["recency_score"] = recency_from_days(time_diff_days)
     
     return df, word_count_scaler, most_recent_date_in_history
 
@@ -47,8 +146,15 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
     df = preprocessed_df.copy()
 
     # TF-IDF 
-    tfidf_vectorizer = TfidfVectorizer(stop_words='english', min_df=1, max_df=0.9)
-    tfidf_matrix = tfidf_vectorizer.fit_transform(df['combined_text_features'])
+    tfidf_vectorizer = TfidfVectorizer(analyzer=_identity_analyzer, min_df=1, max_df=0.9)
+    try:
+        tfidf_matrix = tfidf_vectorizer.fit_transform(df['feature_tokens'])
+    except ValueError as e:
+        raise ProfileError(
+            "Your reading history doesn't have enough variety to build a profile: the fandoms, "
+            "ships and tags are (almost) identical across your works. Read a wider range of fics, "
+            "or load more history, and try again."
+        ) from e
 
     # one hot encoding 
     ohe_rating_sparse = ohe_rating_encoder.fit_transform(df[['rating']])
@@ -68,7 +174,7 @@ def vectorize_all_features(preprocessed_df: pd.DataFrame, ohe_rating_encoder: On
 
 
 def build_user_profile(combined_sparse_features, preprocessed_df: pd.DataFrame, feature_names):
-    bookmark_boost: float = 10.0 
+    bookmark_boost: float = BOOKMARK_BOOST
 
     all_history_fic_vectors = csr_matrix(combined_sparse_features)
     recency_scores = preprocessed_df['recency_score'].values.astype(np.float64)
@@ -101,13 +207,8 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     ohe_rating_encoder = model_components['ohe_rating_encoder']
     word_count_scaler = model_components['word_count_scaler']
 
-    # text data
-    text_columns = ['fandom', 'orientations', 'ships', 'tags']
-    for c in text_columns:
-        df_to_score[f"{c}_str"] = df_to_score[c].apply(lambda x: ' '.join(map(str, x)) if isinstance(x, list) else str(x) if pd.notna(x) else '')
-    
-    df_to_score['combined_text_features'] = df_to_score[[f"{c}_str" for c in text_columns]].agg(' '.join, axis=1)
-    df_to_score['combined_text_features'] = df_to_score['combined_text_features'].str.lower().str.replace('[^a-z0-9, ]', ' ', regex=True).str.strip().str.replace(r'\s+', ' ', regex=True)
+    # same tokens as the history (one token per fandom / orientation / ship / tag)
+    df_to_score['feature_tokens'] = build_feature_tokens(df_to_score)
 
     # normalized word count
     df_to_score['word_count'] = df_to_score['word_count'].fillna(0).clip(lower=0, upper=word_count_scaler.data_max_[0])
@@ -115,7 +216,7 @@ def score_unread_fanfics(unread_df: pd.DataFrame, user_profile: pd.Series, model
     df_to_score["recency_score"] = 1 
 
     # TF-IDF
-    unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['combined_text_features'])
+    unread_tfidf_matrix = tfidf_vectorizer.transform(df_to_score['feature_tokens'])
 
     # One-Hot Encoding
     known_ratings = ohe_rating_encoder.categories_[0]
@@ -169,6 +270,9 @@ def generate_common_ship_tags(dataFrame, ship_tag = None, tag_filter = None):
 
 
 def create_user_profile_from_history(history_df: pd.DataFrame):
+    if history_df.empty:
+        raise ProfileError("Your reading history is empty, so there is nothing to build a profile from.")
+
     ohe_rating_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=True)
     ohe_rating_encoder.fit(history_df[['rating']])
 

@@ -17,6 +17,18 @@ def get_history():
         st.session_state.current_page = "intro"
         st.rerun()
 
+PARTIAL_WARNING = (
+    "The scrape stopped before it finished, so this ledger may be incomplete: older history, "
+    "marked-for-later removals or bookmark flags may be missing, depending on where it stopped. "
+    "Note that \"Read history for newer fics\" only reads until it reaches a page it already has, "
+    "so it will NOT fill in older gaps. To complete the ledger, run a fresh fetch from AO3."
+)
+
+def render_warnings(target):
+    warnings = st.session_state.get("scrape_warnings") or []
+    if warnings:
+        target.warning("\n".join(f"- {w}" for w in warnings))
+
 def render_login_and_scrape():
     error_state = st.session_state.get("scrape_error")
     if error_state:
@@ -37,10 +49,11 @@ def render_login_and_scrape():
  
         with st.form("login_form"):
             username = st.text_input("Username", max_chars=40)
-            password = st.text_input("Password", type="password")
+            password = st.text_input("Password", type="password", max_chars=72)
             submit_button = st.form_submit_button("Access Archives")
  
     status = st.empty()
+    warning_display = st.empty()
  
     if not submit_button:
         return
@@ -58,11 +71,19 @@ def render_login_and_scrape():
 
     starting_later = True
     starting_bookmarks = True
+
+    st.session_state.scrape_warnings = []
+    st.session_state.scrape_message = None
+    st.session_state.scrape_partial = False
         
     for event_type, message, data in stream_backend("scrape", payload):
  
         if event_type == "STATUS":
             status.markdown(f'<p class="archive-sub">{message}</p>', unsafe_allow_html=True)
+
+        elif event_type == "WARNING":
+            st.session_state.scrape_warnings.append(message)
+            render_warnings(warning_display)
 
         elif event_type == "LOGIN_FAILED":
             status.error(message)
@@ -182,6 +203,7 @@ def render_login_and_scrape():
  
         elif event_type == "DONE":
             final_records = data
+            st.session_state.scrape_message = message
             title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Done!</b></p>", unsafe_allow_html=True)
  
     if final_records is not None:
@@ -196,9 +218,11 @@ def render_error_recovery(error_state):
     partial_data = error_state.get("partial_data")
  
     st.error(message)
+    render_warnings(st)
  
     if partial_data:
         st.write(f"Currently with **{len(partial_data)}** works stored.")
+        st.warning(PARTIAL_WARNING)
  
     col1, col2 = st.columns(2)
     with col1:
@@ -214,6 +238,7 @@ def render_error_recovery(error_state):
         ):
             st.session_state.df = pd.DataFrame(partial_data)
             st.session_state.scrape_complete = True
+            st.session_state.scrape_partial = True
             st.session_state.logging_in = False
             del st.session_state["scrape_error"]
             st.rerun()
@@ -223,6 +248,11 @@ def render_error_recovery(error_state):
 def render_results():
     st.write("✨ Ledger compilation complete!")
     st.markdown(f"**{len(st.session_state.df)} total works** are now saved in your active session.")
+    if st.session_state.get("scrape_message"):
+        st.caption(st.session_state.scrape_message)
+    if st.session_state.get("scrape_partial"):
+        st.warning(PARTIAL_WARNING)
+    render_warnings(st)
     st.markdown("<br>", unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
