@@ -241,18 +241,19 @@ def gettingBookmarks(worker, username, ledger, stats):
     return result
 
 
-def fetchingUnreadWorks(worker, username, password, ship, history_records):
+def fetchingUnreadWorks(worker, username, password, ship, history_records, inc_tags, exc_tags):
     stats = {"skipped": 0}
- 
-    logged_in = yield from logIn(worker, username, password, stats)
-    if not logged_in:
-        return
+    
+    if username and password:
+        logged_in = yield from logIn(worker, username, password, stats)
+        if not logged_in:
+            return
  
     history_df = pd.DataFrame(history_records) if history_records else pd.DataFrame(columns=WORK_DF_COL)
  
     yield make_event("STATUS", message="Building your reading profile...")
     try:
-        tag_ship_counts = select_search_tags(history_df, ship)  # DataFrame with a 'tag' column, best first
+        tag_ship_counts = select_search_tags(history_df, ship, exc_tags)
         user_profile_vector, fitted_model_components = create_user_profile_from_history(history_df)
     except ProfileError as e:
         yield make_event("ERROR", message=str(e))
@@ -262,7 +263,7 @@ def fetchingUnreadWorks(worker, username, password, ship, history_records):
         return
  
     def _job(page, progress_q, cancel):
-        return scrap_unread_fics(page, history_df, tag_ship_counts, ship, progress_q=progress_q, cancel=cancel)
+        return scrap_unread_fics(page, history_df, tag_ship_counts, inc_tags, exc_tags, ship, progress_q=progress_q, cancel=cancel)
  
     def _score(df):
         return score_unread_fanfics(df, user_profile_vector, fitted_model_components)
@@ -396,28 +397,56 @@ def _combine_unread(existing, new):
     return pd.concat([existing, new], ignore_index=True)
 
 
-def scrap_unread_fics(page, history_df, tag_ship_counts, ship_tag, progress_q=None, cancel=None):
+def _include_tags(tag_ship_counts, inc_tags, max_tags):
+    if inc_tags and len(inc_tags) > 0:
+        remaining_df = tag_ship_counts[~tag_ship_counts['tag'].isin(inc_tags)]
+        
+        inc_df = pd.DataFrame({'tag': inc_tags})
+        inc_df = inc_df.merge(tag_ship_counts, on='tag', how='left')
+        
+        tag_ship_counts = pd.concat([inc_df, remaining_df], ignore_index=True)
+
+        tag_ship_counts = tag_ship_counts.head(max_tags) 
+
+    return tag_ship_counts
+
+def scrap_unread_fics(page, history_df, tag_ship_c, inc_tags, exc_tags, ship_tag, progress_q=None, cancel=None):
     max_number_fics = 200
     max_tags = 5
     notify(progress_q, {"max_fics": max_number_fics})
     notify(progress_q, {"status": f"Will now fetch {max_number_fics} unread fanfics for scoring."})
     base_search_url = 'https://archiveofourown.org/works/search?'
 
+    tag_ship_counts = _include_tags(tag_ship_c, inc_tags, max_tags)
+
     raw_tags = tag_ship_counts['tag'].head(max_tags).tolist()
     formatted_tags, formatted_ship_tag = format_unread_fic_tags(max_tags, tag_ship_counts, ship_tag)
+    formatted_exc_tags = [quote_plus(t) for t in exc_tags]
 
-    # The ship may have fewer than 5 tags in the history (or none): never index past what exists.
     number_tags = len(formatted_tags)
     passes = 0
 
     unread_df = pd.DataFrame(columns=WORK_DF_COL)
 
+# only includes, works as intended
+#https://archiveofourown.org/works/search?work_search[relationship_names]=Jinu%2FRumi+(KPop+Demon+Hunters)&work_search[freeform_names]=%2CAngst%2CPost-Canon%2CHurt%2FComfort%2CRumi+Needs+a+Hug+(KPop+Demon+Hunters)%2CJinu+Lives+(KPop+Demon+Hunters)&work_search[sort_column]=kudos_count&commit=Search&page=1
+
+# normal search with filter, one include and one exclude
+#https://archiveofourown.org/works?work_search%5Bsort_column%5D=revised_at&include_work_search%5Bfreeform_ids%5D%5B%5D=176&work_search%5Bother_tag_names%5D=&exclude_work_search%5Bfreeform_ids%5D%5B%5D=110&work_search%5Bexcluded_tag_names%5D=&work_search%5Bcrossover%5D=&work_search%5Bcomplete%5D=&work_search%5Bwords_from%5D=&work_search%5Bwords_to%5D=&work_search%5Bdate_from%5D=&work_search%5Bdate_to%5D=&work_search%5Bquery%5D=&work_search%5Blanguage_id%5D=&commit=Sort+and+Filter&tag_id=KPop+Demon+Hunters+%282025%29
+
     try:
         while len(unread_df) < max_number_fics and number_tags >= 0:
             check_cancelled(cancel)
-            current_url_query = f"work_search%5Brelationship_names%5D={formatted_ship_tag}&work_search%5Bfreeform_names%5D="
+            current_url_query: str = f"work_search%5Brelationship_names%5D={formatted_ship_tag}&work_search%5Bfreeform_names%5D="
             for t in range(number_tags):
                 current_url_query = f"{current_url_query}%2C{formatted_tags[t]}"
+
+            if len(formatted_exc_tags) > 0:
+                current_url_query += "&work_search%5Bquery%5D="
+                for i in range(len(formatted_exc_tags)):
+                    if i > 0:
+                        current_url_query += "+"
+                    current_url_query += f"-%22{formatted_exc_tags[i]}%22"
 
             current_url_query += "&work_search%5Bsort_column%5D=kudos_count&commit=Search&page="
             full_base_url = base_search_url + current_url_query

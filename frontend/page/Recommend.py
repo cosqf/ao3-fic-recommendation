@@ -1,3 +1,4 @@
+from cProfile import label
 import streamlit as st 
 import pandas as pd
 from call_api import stream_backend
@@ -14,7 +15,7 @@ def recommend():
  
     st.markdown("---")
     if st.button("← Go back"):
-        st.session_state.current_page = "intro"
+        st.session_state.current_page = "stats"
         st.rerun()
  
  
@@ -24,22 +25,34 @@ def render_ship_and_login():
             s for row in st.session_state.df["ships"] if isinstance(row, list)
             for s in row if "/" in s or "&" in s
         })
+        tag_set = sorted({
+            s for row in st.session_state.df["tags"] if isinstance(row, list)
+            for s in row})
+
         ship = st.selectbox(
             "Choose a ship you wish to read more of...",
             ship_set,
             index=ship_set.index(st.session_state.chosen_ship)
                 if st.session_state.get("chosen_ship") in ship_set else 0,
         )
+        include_t = st.multiselect(label="Tags to include", select_all= False, max_selections=5, on_change="ignore", options=tag_set)
+        exclude_t = st.multiselect(label="Tags to exclude", select_all= False, max_selections=5, on_change="ignore", options=tag_set)
+
+        login = st.checkbox ("Use your account to search for fics", on_change="ignore", value=True, help="If you don't want to insert your credentials again it's possible to fetch fics with a guest account, but many works may be hidden or unavailable.")
+
         if st.button("Find Fics →", type="primary"):
             st.session_state.ship_chosen = True
             st.session_state.chosen_ship = ship
+            st.session_state.include_tags = include_t
+            st.session_state.exclude_tags = exclude_t
+            st.session_state.login = login
             st.rerun()
         return
- 
+    
     username = st.session_state.get("username")
     password = st.session_state.get("password")
- 
-    if not (username and password):
+
+    if st.session_state.login and not (username and password):
         login_error = st.session_state.pop("login_error", None)
         if login_error:
             st.error(login_error)
@@ -71,10 +84,12 @@ def render_ship_and_login():
         return
  
     payload = {
+        "ship": st.session_state.chosen_ship,
         "username": username,
         "password": password,
         "df": st.session_state.df.to_dict(orient="records"),
-        "ship": st.session_state.chosen_ship,
+        "inc_tags": st.session_state.include_tags,
+        "exc_tags": st.session_state.exclude_tags
     }
     fetch_works(payload)
  
@@ -266,4 +281,6 @@ def display_fics():
         st.session_state.ship_chosen = False
         st.session_state.scrape_unread_complete = False
         st.session_state.chosen_ship = None 
+        st.session_state.include_tags = None
+        st.session_state.exclude_tags = None
         st.rerun()

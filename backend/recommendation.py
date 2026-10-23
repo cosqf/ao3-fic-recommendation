@@ -63,9 +63,10 @@ def history_weights(df: pd.DataFrame) -> np.ndarray:
     bookmarked = df['bookmarked'].eq(True).to_numpy(dtype=float)
     return recency + bookmarked * BOOKMARK_BOOST
 
-def select_search_tags(history_df: pd.DataFrame, ship: str, max_tags: int = MAX_SEARCH_TAGS,
+
+def select_search_tags(history_df: pd.DataFrame, ship: str, exc_tags: list[str], max_tags: int = MAX_SEARCH_TAGS,
                        prior_strength: float = TAG_PRIOR_STRENGTH) -> pd.DataFrame:
-# score(tag) = (ship_works(tag) + prior_strength * overall_share(tag)) / (ship_works_total + prior_strength)
+    # score(tag) = (ship_works(tag) + prior_strength * overall_share(tag)) / (ship_works_total + prior_strength)
 
     columns = ['tag', 'score', 'source', 'ship_works', 'total_works']
     df = history_df.reset_index(drop=True)
@@ -92,7 +93,11 @@ def select_search_tags(history_df: pd.DataFrame, ship: str, max_tags: int = MAX_
                 st['ship_works'] += 1
 
     rows = []
+    exc_keys = {_normalize(t) for t in exc_tags}
+
     for key, st in stats.items():
+        if key in exc_keys:
+            continue
         in_this_ship = st['ship_works'] > 0
         portable = len(all_fandoms) <= 1 or (
             st['works'] >= PORTABLE_MIN_WORKS

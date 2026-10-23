@@ -141,27 +141,31 @@ async def scrape_endpoint(payload: ScrapeRequest, request: Request, x_session_id
 
 
 class FetchWorksRequest(BaseModel):
-    username: str
-    password: str
     ship: str
+    username: str | None = None
+    password: str | None = None
     df: list[dict] | None = None
+    inc_tags : list[str] | None = None
+    exc_tags : list[str] | None = None
 
 
 @app.post("/fetch_works")
 async def fetch_works_endpoint(payload: FetchWorksRequest, request: Request, x_session_id: str | None = Header(default=None)):
     print ("fetch!")
-    if not payload.username.strip() or not payload.password.strip():
-        return _error_response("username and password are required")
-
     if not payload.ship.strip():
         return _error_response("a ship/relationship tag is required")
 
     job, worker, error = await run_in_threadpool(_start, payload.username, x_session_id)
     if error:
         return _error_response(error)
+    username = payload.username or None
+    password = payload.password or None
+
+    inc_tag = payload.inc_tags or [] 
+    exc_tag = payload.exc_tags or [] 
 
     return StreamingResponse(
-        stream(request, fetchingUnreadWorks(worker, payload.username, payload.password, payload.ship, payload.df), worker, job),
+        stream(request, fetchingUnreadWorks(worker, username, password, payload.ship, payload.df, inc_tag, exc_tag), worker, job),
         media_type=NDJSON,
     )
 
