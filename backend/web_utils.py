@@ -10,12 +10,16 @@ PAGE_RETRY_WAIT = 30      # seconds between attempts
 PAGE_DELAY = (0.5, 2)    # random pause before each page load
 MAX_RETRY_AFTER = 120      # cap on how long we obey AO3's Retry-After header
 CHALLENGE_WAIT = 25        # seconds to let a Cloudflare/"Shields are up" page resolve itself
+TRANSIENT_RETRY_WAITS = (10, 20)   # waits between attempts when AO3/Cloudflare answers with a 5xx
 
 class ScrapeError(Exception):
     def __init__(self, message, partial=None):
         super().__init__(message)
         self.message = message # reason shown to the user
         self.partial = partial # what the stage had when it failed
+
+class AO3Unavailable(ScrapeError):
+    """AO3 (or Cloudflare in front of it) kept answering with a 5xx. Not the user's fault."""
 
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -168,6 +172,7 @@ def load_page(page, url, progress_q=None, ready_selector=None,
               retries=PAGE_RETRIES, wait_seconds=PAGE_RETRY_WAIT, cancel=None,
               selector_timeout=15000, pace=True):
     problem = ""
+    server_error = None   # HTTP status of the most recent attempt if it was a 5xx, else None
     for attempt in range(retries + 1):
         check_cancelled(cancel)
         if pace and attempt == 0:
@@ -175,11 +180,17 @@ def load_page(page, url, progress_q=None, ready_selector=None,
 
         response = None
         wait = wait_seconds
+        server_error = None
         try:
             response = safe_goto(page, url)
-            if is_cloudflare_blocked(page) and not wait_out_challenge(page, cancel):
+            if response is not None and 500 <= response.status < 600:
+                server_error = response.status
+                problem = f"AO3 returned HTTP {server_error}"
+                wait = TRANSIENT_RETRY_WAITS[min(attempt, len(TRANSIENT_RETRY_WAITS) - 1)]
+                print(f"[load_page] {url} -> {describe_page(page, response)}")
+            elif is_cloudflare_blocked(page) and not wait_out_challenge(page, cancel):
                 raise ScrapeError("blocked by Cloudflare, please try again shortly")
-            if (response is not None and response.status == 429) or is_rate_limited(page):
+            elif (response is not None and response.status == 429) or is_rate_limited(page):
                 problem = "AO3 is rate limiting requests"
                 wait = max(wait_seconds, min(_retry_after_seconds(response), MAX_RETRY_AFTER))
                 print(f"[load_page] {url} -> {describe_page(page, response)}")
@@ -199,4 +210,9 @@ def load_page(page, url, progress_q=None, ready_selector=None,
             notify(progress_q, {"warning": msg})
             cancellable_sleep(cancel, wait)
 
+    if server_error is not None:
+        raise AO3Unavailable(
+            f"AO3 seems to be having problems right now (HTTP {server_error}). "
+            f"This is on AO3's side, not your account. Please try again in a few minutes."
+        )
     raise ScrapeError(f"{problem}; gave up after {retries + 1} attempts ({url})")
