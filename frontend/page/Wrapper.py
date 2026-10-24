@@ -86,7 +86,7 @@ def wrapper():
     all_fandoms = [f.strip() for cell in fdf["fandom"] if isinstance(cell, list) for f in cell]
     top_fandom_overall = Counter(all_fandoms).most_common(1)[0][0] if all_fandoms else "Varied Lore"
 
-    # ── MIGRATION / DEVOTION ──────────────────────────────────────────────────
+        # ── MIGRATION / DEVOTION ──────────────────────────────────────────────────
 
     temp = fdf.copy()
     temp["month"] = pd.to_datetime(temp["last_visited"]).dt.to_period("M")
@@ -94,22 +94,26 @@ def wrapper():
     for month, group in temp.groupby("month"):
         fandoms = [f.strip() for cell in group["fandom"] if isinstance(cell, list) for f in cell]
         if fandoms:
-            timeline_raw.append((month.strftime("%B"), Counter(fandoms).most_common(1)[0][0]))
+            timeline_raw.append((month, Counter(fandoms).most_common(1)[0][0]))
 
+    # collapse consecutive months with the same top fandom into [start, end, fandom]
     migration = []
-    for entry in timeline_raw:
-        if not migration or migration[-1][1] != entry[1]:
-            migration.append(entry)
+    for month, fandom in timeline_raw:
+        if migration and migration[-1][2] == fandom:
+            migration[-1][1] = month
+        else:
+            migration.append([month, month, fandom])
 
-    unique_fandoms = list(dict.fromkeys(f for _, f in migration))
+    def _range_label(start, end):
+        if start == end:
+            return start.strftime("%B")
+        return f"{start.strftime('%b')} – {end.strftime('%b')}"
+
+    unique_fandoms = list(dict.fromkeys(f for _, _, f in migration))
     single_fandom_mode = len(unique_fandoms) <= 1
 
     if single_fandom_mode:
         devotion_fandom = unique_fandoms[0] if unique_fandoms else top_fandom_overall
-        devotion_count  = sum(
-            1 for cell in fdf["fandom"]
-            if isinstance(cell, list) and devotion_fandom in [f.strip() for f in cell]
-        )
         page4_html = f"""
   <div class="page-label mono-label mb-md">A Singular Focus</div>
   <div class="ruled-top"></div>
@@ -117,18 +121,19 @@ def wrapper():
     <div class="mono-label mb-md">A loyal reader</div>
     <div class="title-lg text-italic text-accent mb-md">{devotion_fandom}</div>
     <div class="text-muted text-italic">
-      You stayed put. {devotion_count} work{"s" if devotion_count != 1 else ""},
-      one main fandom; an impressive level of dedication!
+      You stayed put. One main fandom; an impressive level of dedication!
     </div>
   </div>
   <div class="ruled-bottom"></div>"""
+        shown = []
     else:
+        shown = migration[-7:]
         migration_rows_html = "".join(
             f'<div class="flex-list">'
-            f'<span class="mono-label" style="min-width: 82px;">{month}</span>'
+            f'<span class="mono-label" style="min-width: 130px;">{_range_label(start, end)}</span>'
             f'<span class="text-md text-italic">{fandom}</span>'
             f'</div>'
-            for month, fandom in migration[-7:]
+            for start, end, fandom in shown
         )
         page4_html = f"""
   <div class="page-label mono-label">Fandom Timeline</div>
@@ -137,8 +142,7 @@ def wrapper():
   <div class="w-full max-w-sm mb-lg">{migration_rows_html}</div>
   <div class="ruled-bottom"></div>"""
 
-    # dialed down frame height slightly since internal buttons are removed
-    extra_rows   = 0 if single_fandom_mode else max(0, len(migration) - 4)
+    extra_rows   = max(0, len(shown) - 4)
     frame_height = 610 + extra_rows * 40
 
     theme = st.context.theme.type

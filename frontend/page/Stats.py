@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 from collections import Counter
-from itertools import product as iterproduct
 from frontend.wrapped import generate_common_ship_tags, generate_common_ship_ratings
 import altair as alt
 
+THEME_COLORS = {
+    "light": {"primary": "#8c2d19", "muted": "#7b6e5c"},
+    "dark":  {"primary": "#a33520", "muted": "#8b7653"},
+}
 
 def apply_filters(df, date_from, date_to, fandoms, ships, ratings, orientations, min_words, max_words):
     if df.empty:
@@ -55,6 +58,8 @@ def stats():
         st.session_state.filtered_df = st.session_state.df.copy()
 
     df = st.session_state.df
+    colors = THEME_COLORS.get(st.context.theme.type, THEME_COLORS["light"])
+    PRIMARY, MUTED = colors["primary"], colors["muted"]
 
     with st.sidebar:
         st.header("Filters")
@@ -256,8 +261,8 @@ def stats():
                     
                     chart = alt.Chart(word_dist).mark_line(
                         strokeWidth=3, 
-                        color="#8c2d19",
-                        point=alt.OverlayMarkDef(color="#8c2d19", size=60)
+                        color=PRIMARY,
+                        point=alt.OverlayMarkDef(color=PRIMARY, size=60)
                     ).encode(
                         x=alt.X('Length Range:N', sort=labels, title=""),
                         y=alt.Y('Number of Works:Q', title="Works Read")
@@ -509,7 +514,7 @@ def stats():
                     x=alt.X('Length Range:N', sort=labels, title="Word Count Range"),
                     y=alt.Y('Percentage:Q', axis=alt.Axis(format='%'), title="Share of Works"),
                     color=alt.Color('Dataset:N', 
-                        scale=alt.Scale(domain=['Overall History', 'Bookmarks'], range=['#555555', '#8c2d19']),
+                        scale=alt.Scale(domain=['Overall History', 'Bookmarks'], range=[MUTED, PRIMARY]),
                         legend=alt.Legend(orient='bottom', direction='horizontal', title=None)
                     )
                 ).properties(height=300)
@@ -534,7 +539,7 @@ def stats():
                     x=alt.X('Rating:N', title=None, axis=alt.Axis(labelAngle=0)),
                     y=alt.Y('Percentage:Q', axis=alt.Axis(format='%')),
                     color=alt.Color('Dataset:N', 
-                        scale=alt.Scale(domain=['Overall History', 'Bookmarks'], range=['#555555', '#8c2d19']),
+                        scale=alt.Scale(domain=['Overall History', 'Bookmarks'], range=[MUTED, PRIMARY]),
                         legend=alt.Legend(orient='bottom', direction='horizontal', title=None)
                     ),
                     xOffset='Dataset:N'
@@ -581,42 +586,42 @@ def stats():
                     )
 
             # CONVERSION MATRIX (Fandoms)
-        with st.container(border=True):
-            st.subheader("The fandoms you love")
-            st.caption("Which fandoms you bookmark the most?")
-            
-            hist_fandoms = Counter(f.strip() for cell in fdf["fandom"] if isinstance(cell, list) for f in cell)
-            bkmk_fandoms = Counter(f.strip() for cell in bdf["fandom"] if isinstance(cell, list) for f in cell)
-            
-            matrix_data = []
-            for fandom, total_read in hist_fandoms.items():
-                bookmarked = bkmk_fandoms.get(fandom, 0)
+            with st.container(border=True):
+                st.subheader("The fandoms you love")
+                st.caption("Which fandoms you bookmark the most?")
                 
-                if total_read >= 5 and bookmarked > 0:
-                    rate = (bookmarked / total_read) * 100
-                    matrix_data.append({
-                        "Fandom": fandom, 
-                        "Read": total_read, 
-                        "Bookmarked": bookmarked, 
-                        "Conversion": rate
-                    })
-            
-            if matrix_data:
-                matrix_df = pd.DataFrame(matrix_data).sort_values("Conversion", ascending=False)
+                hist_fandoms = Counter(f.strip() for cell in fdf["fandom"] if isinstance(cell, list) for f in cell)
+                bkmk_fandoms = Counter(f.strip() for cell in bdf["fandom"] if isinstance(cell, list) for f in cell)
                 
-                st.dataframe(
-                    matrix_df,
-                    column_config={
-                        "Fandom": "Fandom",
-                        "Read": "Total Read",
-                        "Bookmarked": "Bookmarked",
-                        "Conversion": st.column_config.NumberColumn("Conversion Rate", format="%.1f%%")
-                    },
-                    hide_index=True, width='stretch'
-                )
-            else:
-                st.info("No fandoms match the criteria yet (requires at least 5 works read and at least 1 bookmark).")
-    
+                matrix_data = []
+                for fandom, total_read in hist_fandoms.items():
+                    bookmarked = bkmk_fandoms.get(fandom, 0)
+                    
+                    if total_read >= 5 and bookmarked > 0:
+                        rate = (bookmarked / total_read) * 100
+                        matrix_data.append({
+                            "Fandom": fandom, 
+                            "Read": total_read, 
+                            "Bookmarked": bookmarked, 
+                            "Conversion": rate
+                        })
+                
+                if matrix_data:
+                    matrix_df = pd.DataFrame(matrix_data).sort_values("Conversion", ascending=False)
+                    
+                    st.dataframe(
+                        matrix_df,
+                        column_config={
+                            "Fandom": "Fandom",
+                            "Read": "Total Read",
+                            "Bookmarked": "Bookmarked",
+                            "Conversion": st.column_config.NumberColumn("Conversion Rate", format="%.1f%%")
+                        },
+                        hide_index=True, width='stretch'
+                    )
+                else:
+                    st.info("No fandoms match the criteria yet (requires at least 5 works read and at least 1 bookmark).")
+        
     # DATA TABLE
     with tab_data:
         with st.container(border=True):

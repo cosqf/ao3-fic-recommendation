@@ -1,4 +1,3 @@
-from cProfile import label
 import streamlit as st 
 import pandas as pd
 from call_api import stream_backend
@@ -61,7 +60,7 @@ def render_ship_and_login():
             <p class="serif-body">
                 To find the most fics, your AO3 username and password is needed.
             </p>
-            <p class="serif-body" style="font-size: 0.9rem; color:#6e5f4b;">
+            <p class="serif-body" style="font-size: 0.9rem; color: var(--muted);">
                 No one has access to your session but yourself.
             </p>
         """, unsafe_allow_html=True)
@@ -169,7 +168,7 @@ def fetch_works(payload):
  
             if "current_tags" in data:
                 tag_pills = " ".join(
-                    f"<span style='background:muted; color:bg; border-radius:12px; "
+                    f"<span style='background:var(--muted); color:var(--bg); border-radius:12px; "
                     f"padding:2px 10px; margin:2px; font-size:0.8em; display:inline-block;'>"
                     f"{tag}</span>"
                     for tag in data["current_tags"]

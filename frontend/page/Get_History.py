@@ -42,7 +42,7 @@ def render_login_and_scrape():
             <p class="serif-body">
                 To read your history, your AO3 username and password is needed.
             </p>
-            <p class="serif-body" style="font-size: 0.9rem; color:#6e5f4b;">
+            <p class="serif-body" style="font-size: 0.9rem; color: var(--muted);">
                 No one has access to your session but yourself.
             </p>
         """, unsafe_allow_html=True)
@@ -133,7 +133,7 @@ def render_login_and_scrape():
         elif event_type == "HISTORY_DONE":
             progress_bar.progress(1.0)
             st.balloons()
-            title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>History Done!</b></p>", unsafe_allow_html=True)
+            title_status.markdown("<p style='text-align: center; color: var(--accent-lt);'><b>History Done!</b></p>", unsafe_allow_html=True)
             
             
  
@@ -162,7 +162,7 @@ def render_login_and_scrape():
         elif event_type == "MARKED_LATER_DONE":
             progress_bar.progress(1.0)
             st.balloons()
-            title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Removed Marked for Later!</b></p>", unsafe_allow_html=True)
+            title_status.markdown("<p style='text-align: center; color: var(--accent-lt);'><b>Removed Marked for Later!</b></p>", unsafe_allow_html=True)
  
         elif event_type == "BOOKMARK_PROGRESS" and data:
             if starting_bookmarks:
@@ -195,7 +195,7 @@ def render_login_and_scrape():
         elif event_type == "BOOKMARK_DONE":
             progress_bar.progress(1.0)
             st.balloons()
-            title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Bookmarks Synchronized!</b></p>", unsafe_allow_html=True)
+            title_status.markdown("<p style='text-align: center; color: var(--accent-lt);'><b>Bookmarks Synchronized!</b></p>", unsafe_allow_html=True)
 
         elif event_type == "ERROR":
             st.session_state.scrape_error = {"message": message, "partial_data": data}
@@ -204,7 +204,7 @@ def render_login_and_scrape():
         elif event_type == "DONE":
             final_records = data
             st.session_state.scrape_message = message
-            title_status.markdown("<p style='text-align: center; color: #8c2d19;'><b>Done!</b></p>", unsafe_allow_html=True)
+            title_status.markdown("<p style='text-align: center; color: var(--accent-lt);'><b>Done!</b></p>", unsafe_allow_html=True)
  
     if final_records is not None:
         st.session_state.df = pd.DataFrame(final_records)
