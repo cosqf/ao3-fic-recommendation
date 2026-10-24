@@ -114,7 +114,7 @@ def logIn(worker, user, pwd, stats):
 
 def _login_job(page, user, pwd, progress_q, cancel=None):
     login_url = "https://archiveofourown.org/users/login"
-    load_page(page, login_url, progress_q=progress_q, ready_selector="#user_login", cancel=cancel)
+    load_page(page, login_url, progress_q=progress_q, ready_selector="#user_login", cancel=cancel, selector_timeout=45000)
     check_cancelled(cancel)
 
     page.fill("#user_login", user)

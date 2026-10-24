@@ -3,9 +3,13 @@ import re
 import time
 from urllib.parse import quote_plus
 import pandas as pd
+import random
 
 PAGE_RETRIES = 2          # extra attempts after the first failed page load
 PAGE_RETRY_WAIT = 30      # seconds between attempts
+PAGE_DELAY = (0.5, 2)    # random pause before each page load
+MAX_RETRY_AFTER = 120      # cap on how long we obey AO3's Retry-After header
+CHALLENGE_WAIT = 25        # seconds to let a Cloudflare/"Shields are up" page resolve itself
 
 class ScrapeError(Exception):
     def __init__(self, message, partial=None):
@@ -80,11 +84,14 @@ def format_unread_fic_tags (number_tags, tag_ship_counts, ship_tag):
     return formatted_tags, formatted_ship_tag
 
 def is_rate_limited(page):
-    return (
-        "Retry later" in page.title() or
-        page.query_selector("div#main p") is not None and
-        "unusual traffic" in (page.query_selector("div#main p").inner_text() or "").lower()
-)
+    try:
+        if "retry later" in page.title().lower():
+            return True
+        text = " ".join(page.locator("body").inner_text(timeout=2000).split()).lower()
+    except Exception:
+        return False
+    # length guard: a fic whose text happens to contain "retry later" must not match
+    return len(text) < 300 and ("retry later" in text or "unusual traffic" in text)
 
 def is_cloudflare_blocked(page):
     return (
@@ -95,11 +102,39 @@ def is_cloudflare_blocked(page):
 
 def safe_goto(page, url, timeout=30000):
     try:
-        page.goto(url, wait_until="networkidle", timeout=timeout)
+        return page.goto(url, wait_until="networkidle", timeout=timeout)
     except Exception:
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        response = page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_load_state("networkidle", timeout=15000)
+        return response
 
+def describe_page(page, response=None):
+    #snapshot of what the browser is actually looking at, for the server log
+    try:
+        status = response.status if response is not None else "?"
+        body = " ".join(page.locator("body").inner_text(timeout=2000).split())[:200]
+        return f"status={status} title={page.title()!r} url={page.url} body={body!r}"
+    except Exception as e:
+        return f"(could not inspect page: {_short(e)})"
+
+
+def _retry_after_seconds(response):
+    try:
+        value = response.headers.get("retry-after") if response is not None else None
+        return int(value) if value and value.strip().isdigit() else 0
+    except Exception:
+        return 0
+
+
+def wait_out_challenge(page, cancel=None, max_seconds=CHALLENGE_WAIT):
+    for _ in range(max_seconds):
+        try:
+            if "just a moment" not in page.title().lower() and not is_cloudflare_blocked(page):
+                return True
+        except Exception:
+            pass  # page is mid-navigation, check again
+        cancellable_sleep(cancel, 1)
+    return False
 
 def notify(progress_q, item):
     if progress_q is not None:
@@ -130,31 +165,38 @@ def cancellable_sleep(cancel, seconds):
 
 
 def load_page(page, url, progress_q=None, ready_selector=None,
-              retries=PAGE_RETRIES, wait_seconds=PAGE_RETRY_WAIT, cancel=None):
+              retries=PAGE_RETRIES, wait_seconds=PAGE_RETRY_WAIT, cancel=None,
+              selector_timeout=15000, pace=True):
     problem = ""
     for attempt in range(retries + 1):
         check_cancelled(cancel)
-        blocked = False
+        if pace and attempt == 0:
+            cancellable_sleep(cancel, random.uniform(*PAGE_DELAY))
+
+        response = None
+        wait = wait_seconds
         try:
-            safe_goto(page, url)
-            if is_cloudflare_blocked(page):
-                blocked = True
-            elif is_rate_limited(page):
+            response = safe_goto(page, url)
+            if is_cloudflare_blocked(page) and not wait_out_challenge(page, cancel):
+                raise ScrapeError("blocked by Cloudflare, please try again shortly")
+            if (response is not None and response.status == 429) or is_rate_limited(page):
                 problem = "AO3 is rate limiting requests"
+                wait = max(wait_seconds, min(_retry_after_seconds(response), MAX_RETRY_AFTER))
+                print(f"[load_page] {url} -> {describe_page(page, response)}")
             else:
                 if ready_selector:
-                    page.wait_for_selector(ready_selector, state="attached", timeout=15000)
+                    page.wait_for_selector(ready_selector, state="attached", timeout=selector_timeout)
                 return
+        except ScrapeError:
+            raise
         except Exception as e:
             problem = f"page failed to load ({_short(e)})"
-
-        if blocked:
-            raise ScrapeError("blocked by Cloudflare, please try again shortly")
+            print(f"[load_page] {url} -> {describe_page(page, response)}")
 
         if attempt < retries:
-            msg = f"{problem}. Retrying in {wait_seconds}s (attempt {attempt + 2} of {retries + 1})..."
+            msg = f"{problem}. Retrying in {wait}s (attempt {attempt + 2} of {retries + 1})..."
             print(msg)
             notify(progress_q, {"warning": msg})
-            cancellable_sleep(cancel, wait_seconds)
+            cancellable_sleep(cancel, wait)
 
     raise ScrapeError(f"{problem}; gave up after {retries + 1} attempts ({url})")
