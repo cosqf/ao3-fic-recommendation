@@ -47,12 +47,10 @@ def _session_id():
 @st.cache_data(ttl=300)
 def wakeup_backend():
     try:
-        print ("HEALTH")
-        response = requests.get(f"{BACKEND_URL}/health", timeout=3)
-        print (response)
+        response = requests.get(f"{BACKEND_URL}/health", headers=_auth_headers(), timeout=3)
+        print(f"health: {response.status_code}")
     except Exception as e:
-        print ("health failed")
-        pass
+        print(f"health failed: {e}")
 
 
 def stream_backend(endpoint: str, payload: dict):

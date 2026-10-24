@@ -207,7 +207,7 @@ def load_page(page, url, progress_q=None, ready_selector=None,
         if attempt < retries:
             msg = f"{problem}. Retrying in {wait}s (attempt {attempt + 2} of {retries + 1})..."
             print(msg)
-            notify(progress_q, {"warning": msg})
+            notify(progress_q, {"retry": msg})
             cancellable_sleep(cancel, wait)
 
     if server_error is not None:

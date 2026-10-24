@@ -119,12 +119,20 @@ def fetch_works(payload):
         status_display = st.empty()
         tags_display = st.empty()
         warnings_display = st.empty()
+        retry_display = st.empty()
  
     max_fics = 200
     final_records = None
  
     for event_type, message, data in stream_backend("fetch_works", payload):
- 
+        if event_type == "RETRY":
+            retry_display.warning(message)
+            retry_shown = True
+            continue
+        if retry_shown:
+            retry_display.empty()
+            retry_shown = False
+
         if event_type == "STATUS":
             status_display.markdown(
                 f"<p style='text-align:center; color:gray; font-size:0.9em;'>{message}</p>",

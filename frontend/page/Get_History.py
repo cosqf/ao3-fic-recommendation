@@ -54,7 +54,8 @@ def render_login_and_scrape():
  
     status = st.empty()
     warning_display = st.empty()
- 
+    retry_display = st.empty()
+
     if not submit_button:
         return
  
@@ -71,13 +72,21 @@ def render_login_and_scrape():
 
     starting_later = True
     starting_bookmarks = True
+    retry_shown = False
 
     st.session_state.scrape_warnings = []
     st.session_state.scrape_message = None
     st.session_state.scrape_partial = False
         
     for event_type, message, data in stream_backend("scrape", payload):
- 
+        if event_type == "RETRY":
+            retry_display.warning(message)
+            retry_shown = True
+            continue
+        if retry_shown:
+            retry_display.empty()
+            retry_shown = False
+
         if event_type == "STATUS":
             status.markdown(f'<p class="archive-sub">{message}</p>', unsafe_allow_html=True)
 

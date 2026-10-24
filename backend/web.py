@@ -18,8 +18,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 #   HEARTBEAT              -                        sent every few seconds while a job runs, so a
 #                                                   client that left is noticed promptly (ignore it)
 #   STATUS                 message                  free text
-#   WARNING                message                  something went wrong but the run continues
-#                                                   (page retry, empty page...)
+#   WARNING                message                  something went wrong but the run continues (page retry, empty page...)
+#   RETRY                  message                  a page load failed and is being retried; transient
+#
 #   LOGIN_SUCCESS / LOGIN_FAILED   message
 #   <STAGE>_PROGRESS       data = progress dict     STAGE: HISTORY, MARKED_LATER, BOOKMARK, UNREAD
 #   <STAGE>_DONE           data = None              stage finished (never carries records)
@@ -63,9 +64,12 @@ def run_stage(worker, job, stage, stats):
             except queue.Empty:
                 return
             warning = item.pop("warning", None)
+            retry = item.pop("retry", None)
             stats["skipped"] += item.pop("skipped", 0)
             if warning:
                 yield make_event("WARNING", message=warning)
+            if retry:
+                yield make_event("RETRY", message=retry)
             if item:
                 yield make_event(f"{stage}_PROGRESS", data=item)
 
@@ -427,12 +431,6 @@ def scrap_unread_fics(page, history_df, tag_ship_c, inc_tags, exc_tags, ship_tag
     passes = 0
 
     unread_df = pd.DataFrame(columns=WORK_DF_COL)
-
-# only includes, works as intended
-#https://archiveofourown.org/works/search?work_search[relationship_names]=Jinu%2FRumi+(KPop+Demon+Hunters)&work_search[freeform_names]=%2CAngst%2CPost-Canon%2CHurt%2FComfort%2CRumi+Needs+a+Hug+(KPop+Demon+Hunters)%2CJinu+Lives+(KPop+Demon+Hunters)&work_search[sort_column]=kudos_count&commit=Search&page=1
-
-# normal search with filter, one include and one exclude
-#https://archiveofourown.org/works?work_search%5Bsort_column%5D=revised_at&include_work_search%5Bfreeform_ids%5D%5B%5D=176&work_search%5Bother_tag_names%5D=&exclude_work_search%5Bfreeform_ids%5D%5B%5D=110&work_search%5Bexcluded_tag_names%5D=&work_search%5Bcrossover%5D=&work_search%5Bcomplete%5D=&work_search%5Bwords_from%5D=&work_search%5Bwords_to%5D=&work_search%5Bdate_from%5D=&work_search%5Bdate_to%5D=&work_search%5Bquery%5D=&work_search%5Blanguage_id%5D=&commit=Sort+and+Filter&tag_id=KPop+Demon+Hunters+%282025%29
 
     try:
         while len(unread_df) < max_number_fics and number_tags >= 0:
