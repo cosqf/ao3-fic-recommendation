@@ -18,7 +18,7 @@ def _secret(name, default=None):
         return default
 
 BACKEND_URL = _secret("BACKEND_URL", f"http://localhost:{API_PORT}")
-
+TERMINAL_EVENTS = {"DONE", "ERROR", "LOGIN_FAILED"}
 _token_lock = threading.Lock()
 
 
@@ -71,7 +71,10 @@ def stream_backend(endpoint: str, payload: dict):
             timeout=(10, 300),
         ) as response:
             if response.status_code in (401, 403):
-                yield "ERROR", f"The backend refused the request (HTTP {response.status_code}). Check the service account and its Invoker role.", None
+                yield "ERROR", f"The backend refused the request (HTTP {response.status_code}).", None
+                return
+            if response.status_code == 429:
+                yield "ERROR", "The server is busy right now. Please try again in a few minutes.", None
                 return
             if response.status_code >= 400:
                 try:
@@ -81,6 +84,7 @@ def stream_backend(endpoint: str, payload: dict):
                 yield "ERROR", f"Backend returned {response.status_code}: {detail}", None
                 return
  
+            finished = False
             for line in response.iter_lines():
                 if not line:
                     continue
@@ -93,8 +97,14 @@ def stream_backend(endpoint: str, payload: dict):
                 if event.get("type") == "HEARTBEAT":  # keep-alive from the backend, nothing to show
                     continue
 
-                print (f"received message of type {event.get('type')} saying {event.get('message', '')}")
-                yield event.get("type", "ERROR"), event.get("message", ""), event.get("data", None)
+                event_type = event.get("type", "ERROR")
+                if event_type in TERMINAL_EVENTS:
+                    finished = True
+                print(f"received message of type {event_type} saying {event.get('message', '')}")
+                yield event_type, event.get("message", ""), event.get("data", None)
+
+            if not finished:
+                yield "ERROR", "The connection to the server closed before the run finished. Please try again.", None
 
     except requests.exceptions.RequestException as e:
         yield "ERROR", f"Connection error: {str(e)}", None

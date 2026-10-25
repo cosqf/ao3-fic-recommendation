@@ -21,6 +21,9 @@ class ScrapeError(Exception):
 class AO3Unavailable(ScrapeError):
     """AO3 (or Cloudflare in front of it) kept answering with a 5xx. Not the user's fault."""
 
+class ScrapeTimeout(ScrapeError):
+    """The run hit its maximum duration. Unlike ScrapeCancelled it is reported to the user, with partial data."""
+
 def settingUpBrowser (pw: Playwright):
         agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
         browser = pw.chromium.launch(headless=True).new_context(user_agent=agent)
@@ -80,8 +83,6 @@ def extract_and_parse_last_visited(full_text):
 def format_unread_fic_tags (number_tags, tag_ship_counts, ship_tag):
     tags = tag_ship_counts['tag'].head(number_tags).tolist()
     formatted_tags = [quote_plus(t) for t in tags]
-    
-    # TODO (later): check regex
 
     formatted_ship_tag = re.sub(r"\[^]*\)", "", ship_tag).strip()
     formatted_ship_tag = quote_plus(formatted_ship_tag)
@@ -156,16 +157,21 @@ class ScrapeCancelled(ScrapeError):
         super().__init__(message, partial)
  
 
+def _stop_exception(cancel):
+    if getattr(cancel, "timed_out", False):
+        return ScrapeTimeout("The run took longer than the maximum allowed time and was stopped.")
+    return ScrapeCancelled()
+
 def check_cancelled(cancel):
     if cancel is not None and cancel.is_set():
-        raise ScrapeCancelled()
+        raise _stop_exception(cancel)
  
  
 def cancellable_sleep(cancel, seconds):
     if cancel is None:
         time.sleep(seconds)
     elif cancel.wait(seconds):
-        raise ScrapeCancelled()
+        raise _stop_exception(cancel)
 
 
 def load_page(page, url, progress_q=None, ready_selector=None,

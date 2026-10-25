@@ -5,12 +5,17 @@ import time
 class Busy(Exception):
     """A run can't start right now. The message is meant for the user."""
 
+class CancelEvent(threading.Event):
+    """threading.Event that also records why it was set."""
+    def __init__(self):
+        super().__init__()
+        self.timed_out = False
 
 class Job:
     def __init__(self, key, session_id):
         self.key = key
         self.session_id = session_id
-        self.cancel_event = threading.Event()   # handed to the browser worker; scrapers check it
+        self.cancel_event = CancelEvent()   # handed to the browser worker; scrapers check it
         self.released = threading.Event()       # set once the run is fully over (browser closed)
         self.started = time.monotonic()
 
@@ -69,3 +74,7 @@ class JobRegistry:
     def active(self):
         with self._lock:
             return len(self._jobs)
+
+    def time_out(self):
+        self.cancel_event.timed_out = True
+        self.cancel_event.set()

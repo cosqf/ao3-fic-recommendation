@@ -28,7 +28,7 @@ registry = JobRegistry(max_jobs=int(os.environ.get("MAX_ACTIVE_JOBS", "2")))
 RELEASE_TIMEOUT = 120      # seconds to wait for a cancelled worker to close its browser before freeing the slot
 DISCONNECT_POLL = 1.0      # seconds between "is the client still there?" checks
 _SESSION_ID_RE = re.compile(r"[0-9a-f]{32}")
-
+MAX_JOB_SECONDS = int(os.environ.get("MAX_JOB_SECONDS", "1800"))
 
 def _clean_session_id(value):
     return value if value and _SESSION_ID_RE.fullmatch(value) else None
@@ -80,6 +80,10 @@ def _release_when_stopped(worker, job, reason):
 
 async def _watch_disconnect(request, job, state):
     while not await request.is_disconnected():
+        if not state.get("timed_out") and time.monotonic() - job.started > MAX_JOB_SECONDS:
+            state["timed_out"] = True
+            print(f"max run time reached, stopping: {_describe(job)} last_event={state['last']}")
+            job.time_out()
         await asyncio.sleep(DISCONNECT_POLL)
     state["logged"] = True
     print(f"client left, cancelling: {_describe(job)} last_event={state['last']}")

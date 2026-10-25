@@ -21,7 +21,7 @@ class PlaywrightWorker(threading.Thread):
 
     def run(self):
         try:
-            self._camoufox = Camoufox(headless=self.headless)
+            self._camoufox = Camoufox(headless=self.headless, block_images=True, i_know_what_im_doing=True)
             browser = self._camoufox.start()
             self.context = browser.new_context()
             self.page = self.context.new_page()
