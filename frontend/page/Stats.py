@@ -414,10 +414,9 @@ def stats():
             )
             monthly.columns = ["Month", "Works"]
             
-            month_chart = alt.Chart(monthly).mark_bar().encode(
+            month_chart = alt.Chart(monthly).mark_bar(color=PRIMARY).encode(
                 x=alt.X('Month:T', title=None),  # :T means its a timeline
                 y=alt.Y('Works:Q', title="Works Read"),
-                color=alt.Color('Works:Q', scale=alt.Scale(scheme='reds'), legend=None)
             ).properties(height=300)
             
             st.altair_chart(month_chart, width='stretch')
@@ -430,10 +429,9 @@ def stats():
             dow = timeline_df["_date"].dt.day_name().value_counts().reindex(dow_order, fill_value=0).reset_index()
             dow.columns = ["Day", "Works"]
             
-            dow_chart = alt.Chart(dow).mark_bar().encode(
-                x=alt.X('Day:N', sort=dow_order, title=None),
+            dow_chart = alt.Chart(dow).mark_bar(color=PRIMARY).encode(
+                x=alt.X('Day:N', sort=dow_order, title=None, axis=alt.Axis(labelAngle=0)),
                 y=alt.Y('Works:Q', title="Works Read"),
-                color=alt.Color('Works:Q', scale=alt.Scale(scheme='reds'), legend=None)
             ).properties(height=300)
             
             st.altair_chart(dow_chart, width='stretch')

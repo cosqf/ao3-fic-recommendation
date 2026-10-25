@@ -123,6 +123,7 @@ def fetch_works(payload):
  
     max_fics = 200
     final_records = None
+    retry_shown = False
  
     for event_type, message, data in stream_backend("fetch_works", payload):
         if event_type == "RETRY":
