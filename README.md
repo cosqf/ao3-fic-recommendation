@@ -21,7 +21,7 @@ For generating recommendations based on a user-provided ship:
 ## How to Run
 
 ### Locally
-1. Clone the repository: `git clone https://github.com/cosqf/ao3-fic-recommendation
+1. Clone the repository: `git clone https://github.com/cosqf/ao3-fic-recommendation`
 2.  Set up a virtual environment (recommended): `python -m venv venv`
     * On Windows: `.\venv\Scripts\activate`
     * On macOS/Linux: `source venv/bin/activate`
