@@ -73,6 +73,9 @@ def stream_backend(endpoint: str, payload: dict):
             if response.status_code in (401, 403):
                 yield "ERROR", f"The backend refused the request (HTTP {response.status_code}).", None
                 return
+            if response.status_code == 404:
+                yield "ERROR", f"The backend is down, so this functionality isn't available (HTTP {response.status_code}).", None
+                return
             if response.status_code == 429:
                 yield "ERROR", "The server is busy right now. Please try again in a few minutes.", None
                 return
