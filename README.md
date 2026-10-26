@@ -1,66 +1,109 @@
-# ao3-fic-recommendation
-A web scrapper that processes your Archive of Our Own (AO3) reading history, provides reading statistics, and recommends fanfiction based on a user-specified ship.
+# AO3 Stats & Fanfic Recommendations
 
-**Login to AO3 is required for history access.**
+This app reads your Archive of Our Own (AO3) reading history, shows statistics about it, and suggests unread fanfics for a ship you choose.
+
+**Logging in to AO3 is required** for the history and recommendations features.
 
 ## Features
 
-* **Fetches your AO3 history:** Obtain a JSON file with all your works read.
-* **Reading History Analysis:** Generates statistics from your AO3 reading history.
-* **Personalized Fanfic Recommendations:** Suggests new, unread fanfics based on your historical reading patterns.
+- **Fetch your AO3 history:** Collect every work you have read, with its metadata (title, tags, fandom, author...). The app can also check your bookmarks and remove works you have marked "Read later" from the list. The result can be downloaded as a JSON file.
+- **Load a saved history:** Upload a JSON file from an earlier run to skip fetching. If you tick "Read history for newer fics", the app only fetches works that are newer than the ones already in the file.
+- **Year in review:** A short, wrapped-style summary of the current year's reading, with your typical story length, your most-read fandom and ship, and your top author.
+- **Reading history analysis:** Explore your history on several tabs:
+  - **Summary:** totals, favorite authors, fandom and orientation breakdowns, rating distribution, and story length.
+  - **Tropes & Ships:** most common ships, tags, and ship and tag combinations.
+  - **Timeline & History:** works read per month, reading by day of the week, and your running word count over time.
+  - **Bookmarks:** how your bookmarked works differ from the rest of your history in length, rating, tags and fandoms.
+  - **Data Table:** the full list, searchable and sortable, with a sidebar to filter by fandom, ship, rating, orientation, word count and date.
 
-## How it Works
+- **Personalized recommendations:** Pick a ship and get up to 10 unread fanfics that match your past reading, with optional tags to include or exclude.
 
-The project constructs a user profile from your AO3 reading history.
+## How it works
 
-For generating recommendations based on a user-provided ship:
-1.  New, unread fanfics relevant to the specified ship are collected from AO3.
-2.  A recommendation score for each unread fanfic is calculated.
-3.  Fanfics are ranked by their recommendation score, and the top-scoring items are presented.
+**Getting your history.** The app logs in to AO3 with a real browser running in the background, then opens each page of your reading history. Your username and password are used only for this login.
 
-## How to Run
+**Building your reading profile.** Each work in your history is turned into a set of features: its fandoms, ships, tags, orientation, rating, and word count. Recent works count more than old ones, and bookmarked works count much more. These features are combined into a single profile that describes your taste.
 
-### Locally
-1. Clone the repository: `git clone https://github.com/cosqf/ao3-fic-recommendation`
-2.  Set up a virtual environment (recommended): `python -m venv venv`
-    * On Windows: `.\venv\Scripts\activate`
-    * On macOS/Linux: `source venv/bin/activate`
-`
+**Recommending fanfics.** For the ship you choose, the app picks the tags that best describe your reading around that ship, with tags from your wider history used as a backup when the ship is new to you. It searches AO3 with those tags, sorted by kudos, and collects up to 200 unread fanfics. Each one is scored by how similar it is to your profile, and the top 10 are shown.
 
-* There's two options to run the backend: fully local, or via Docker
+---
 
-#### Local backend
+## Use the hosted version
 
-1. Install the project with both back and frontend dependencies:
-   `pip install -e ".[backend,frontend]"`
+https://ao3-fic-rec.streamlit.app/
 
-2. Install the browser binary:
-   `camoufox fetch`
+---
 
-   **Linux only:** if this fails with missing system library errors,
-   install: `wget libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0
-   libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3
-   libxrandr2 libgbm1 libasound2`
+## Local setup (one time)
 
-3. Run it, from the repo root:
-  * Backend:
-   `uvicorn backend.main:app --port 8080 --reload`
+1. **Install Python 3.11 to 3.14** from https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"** during install.
+2. **Get the project.** Either download it from GitHub (**Code** → **Download ZIP**) and unzip it, or run `git clone https://github.com/cosqf/ao3-fic-recommendation`.
+3. **Open a terminal in the project folder.**
+   - **Windows:** click the address bar in File Explorer, type `cmd`, press Enter.
+   - **macOS:** open Terminal, type `cd ` (with a space), drag the folder into the window, press Enter.
+   - **Linux:** open a terminal and use `cd` to enter the folder.
+4. **Run these commands**, one at a time, waiting for each to finish.
 
-#### Docker backend
+   **Windows:**
+   ```
+   python -m venv venv
+   venv\Scripts\activate
+   pip install -e ".[backend,frontend]"
+   camoufox fetch
+   ```
 
-1. Build the image, from the repo root:
-   `docker build -t ao3-backend .`
+   **macOS / Linux:**
+   ```
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -e ".[backend,frontend]"
+   camoufox fetch
+   ```
 
-2. Run it, mapping the container's port to your machine:
-   `docker run -p 8080:8080 ao3-backend`
+   On Linux, `camoufox fetch` may fail with missing system libraries. If it does, run this once and then retry the `camoufox fetch` line:
+   ```
+   sudo apt install wget libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
+   ```
 
-#### Frontend
+---
 
-1. Set up a virtual environment and install frontend dependencies (if you
-   haven't already, from the steps above):
-   `pip install -e ".[frontend]"`
+## Run the app
 
-2. Run it, from the repo root, in its own terminal:
-   `streamlit run frontend/app.py`
+You need two terminals open in the project folder. In each one, first run the activate command from step 4 (`(venv)` should appear at the start of the line).
 
-   The frontend talks to the backend over HTTP at `http://localhost:8080` by default.
+- **Terminal 1:** `uvicorn backend.main:app --port 8080`
+- **Terminal 2:** `streamlit run frontend/app.py`
+
+Your browser opens at http://localhost:8501. To stop, press **Ctrl + C** in each terminal.
+
+---
+
+## Problems?
+
+| What you see | What to do |
+|---|---|
+| `'python' is not recognized` (Windows) | Reinstall Python and tick **"Add python.exe to PATH"**. |
+| `(venv)` is missing from the line | Run the activate command from step 4 again. |
+| "Connection error" or "could not start the browser" | Check that Terminal 1 is still running. |
+| "The server is busy" | Wait a few minutes and try again. The server handles only a few runs at a time. |
+
+---
+
+## Notes
+
+- Your username and password are used only to log in to AO3 during a run.
+- You can download your history as a JSON file and upload it next time instead of fetching again.
+- Partly compatible with [Zaki's AO3 History Exporter](https://github.com/Zaki-1052/AO3-History-Exporter). It doesn't include bookmarks.
+- Docker is also possible for the backend. See the developer notes below.
+
+## Developer notes
+
+- Backend: `uvicorn backend.main:app --port 8080 --reload`
+- Frontend: `streamlit run frontend/app.py`
+- Docker backend: `docker build -t ao3-backend .` then `docker run -p 8080:8080 ao3-backend`
+- The frontend reads `BACKEND_URL` from Streamlit secrets if set, otherwise uses `http://localhost:8080`.
+- The backend must run as a single instance, because active runs are tracked in memory.
+
+## License
+
+MIT. See `LICENSE`.

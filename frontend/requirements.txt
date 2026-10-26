@@ -2,3 +2,4 @@ streamlit
 pandas
 requests
 google-auth
+altair
