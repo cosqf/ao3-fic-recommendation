@@ -26,17 +26,13 @@ This app reads your Archive of Our Own (AO3) reading history, shows statistics a
 
 **Recommending fanfics.** For the ship you choose, the app picks the tags that best describe your reading around that ship, with tags from your wider history used as a backup when the ship is new to you. It searches AO3 with those tags, sorted by kudos, and collects up to 200 unread fanfics. Each one is scored by how similar it is to your profile, and the top 10 are shown.
 
----
-
 ## Use the hosted version
 
 https://ao3-fic-rec.streamlit.app/
 
----
-
 ## Local setup (one time)
 
-1. **Install Python 3.11 to 3.14** from https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"** during install.
+1. **Install Python (any version from 3.11 to 3.14)** from https://www.python.org/downloads/ (scroll down to see the different versions). On Windows, tick **"Add python.exe to PATH"** during install.
 2. **Get the project.** Either download it from GitHub (**Code** → **Download ZIP**) and unzip it, or run `git clone https://github.com/cosqf/ao3-fic-recommendation`.
 3. **Open a terminal in the project folder.**
    - **Windows:** click the address bar in File Explorer, type `cmd`, press Enter.
@@ -71,6 +67,7 @@ https://ao3-fic-rec.streamlit.app/
 
 You need two terminals open in the project folder. In each one, first run the activate command from step 4 (`(venv)` should appear at the start of the line).
 
+Run on each terminal:
 - **Terminal 1:** `uvicorn backend.main:app --port 8080`
 - **Terminal 2:** `streamlit run frontend/app.py`
 
