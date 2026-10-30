@@ -194,6 +194,8 @@ def load_page(page, url, progress_q=None, ready_selector=None,
                 problem = f"AO3 returned HTTP {server_error}"
                 wait = TRANSIENT_RETRY_WAITS[min(attempt, len(TRANSIENT_RETRY_WAITS) - 1)]
                 print(f"[load_page] {url} -> {describe_page(page, response)}")
+            elif response is not None and response.status == 418:
+                raise AO3Unavailable("AO3 is down for maintenance. Check their status page for more info.")
             elif is_cloudflare_blocked(page) and not wait_out_challenge(page, cancel):
                 raise ScrapeError("blocked by Cloudflare, please try again shortly")
             elif (response is not None and response.status == 429) or is_rate_limited(page):
